@@ -5,14 +5,31 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 DEFAULT_DATABASE_PATH = Path(__file__).resolve().with_name("pisa_backend.db")
-SQLALCHEMY_DATABASE_URL = os.getenv(
+raw_url = os.getenv(
     "DATABASE_URL", f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
-)
+).strip()
+
+# Strip outer single or double quotes
+if (raw_url.startswith("'") and raw_url.endswith("'")) or (raw_url.startswith('"') and raw_url.endswith('"')):
+    raw_url = raw_url[1:-1].strip()
+
+# Handle case where user copied full `psql ...` command from Neon
+if raw_url.startswith("psql "):
+    import re
+    match = re.search(r"['\"](postgres(?:ql)?://[^'\"]+)['\"]", raw_url)
+    if match:
+        raw_url = match.group(1).strip()
+    else:
+        for part in raw_url.split():
+            if part.startswith("postgres"):
+                raw_url = part.strip()
+                break
 
 # Render and other providers often set DATABASE_URL as postgres://, but SQLAlchemy requires postgresql://
-if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql://", 1)
 
+SQLALCHEMY_DATABASE_URL = raw_url
 
 # Auto-seed SQLite database if target path doesn't exist yet
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
@@ -33,7 +50,12 @@ connect_args = (
     if SQLALCHEMY_DATABASE_URL.startswith("sqlite")
     else {}
 )
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args=connect_args,
+    pool_pre_ping=True,
+    pool_recycle=300
+)
 
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     @event.listens_for(engine, "connect")

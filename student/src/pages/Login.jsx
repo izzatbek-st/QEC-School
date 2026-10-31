@@ -18,11 +18,24 @@ const Login = ({ onLogin }) => {
       body: JSON.stringify({ username, password })
     })
     .then(async res => {
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || "Xatolik yuz berdi");
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        // Not JSON
       }
-      return data;
+
+      if (!res.ok) {
+        if (data && (data.detail || data.message)) {
+          throw new Error(data.detail || data.message);
+        }
+        if (res.status === 404 || res.status === 502 || res.status === 503 || (text && text.includes('Not Found'))) {
+          throw new Error("Server hozirda yangilanmoqda yoki qayta ishga tushmoqda. 1-2 daqiqada qayta urinib ko'ring.");
+        }
+        throw new Error("Login yoki parol noto'g'ri");
+      }
+      return data || {};
     })
     .then(data => {
       if (data.role === 'student') {

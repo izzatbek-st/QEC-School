@@ -19,25 +19,30 @@ const Login = ({ onLogin }) => {
     })
     .then(async res => {
       const text = await res.text();
-      if (!text) {
-        if (!res.ok) {
-          throw new Error('Server javob bermadi. Backend ishlamayapti yoki ulanish uzildi.');
-        }
-        return {};
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        // Response was not JSON
       }
 
-      try {
-        const data = JSON.parse(text);
-        if (!res.ok) {
-          throw new Error(data.detail || data.message || 'Login yoki parol noto\'g\'ri');
+      if (!res.ok) {
+        if (data && (data.detail || data.message)) {
+          throw new Error(data.detail || data.message);
         }
-        return data;
-      } catch {
-        if (text.toLowerCase().includes('<html')) {
-          throw new Error('Serverdan HTML javob qaytdi. Backend yoki reverse proxy ishlamayapti.');
+        if (res.status === 404 || res.status === 502 || res.status === 503 || (text && text.includes('Not Found'))) {
+          throw new Error("Server hozirda yangilanmoqda yoki qayta ishga tushmoqda. 1-2 daqiqada qayta urinib ko'ring.");
         }
-        throw new Error('Serverdan noto\'g\'ri javob formatida ma\'lumot keldi.');
+        if (text && text.toLowerCase().includes('<html')) {
+          throw new Error("Serverdan kutilmagan javob qaytdi. Server ishga tushishini kuting.");
+        }
+        throw new Error("Login yoki parol noto'g'ri");
       }
+
+      if (!data) {
+        throw new Error("Serverdan noto'g'ri javob keldi.");
+      }
+      return data;
     })
     .then(data => {
       if (data.role === 'teacher') {
