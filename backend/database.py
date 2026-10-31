@@ -9,6 +9,11 @@ SQLALCHEMY_DATABASE_URL = os.getenv(
     "DATABASE_URL", f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
 )
 
+# Render and other providers often set DATABASE_URL as postgres://, but SQLAlchemy requires postgresql://
+if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+
 # Auto-seed SQLite database if target path doesn't exist yet
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     try:

@@ -242,6 +242,74 @@ def student_topic_payload(topic: models.Topic, student_id: int) -> dict:
     return payload
 
 
+def seed_from_template_if_empty(db: Session):
+    # If blocks already exist, do not re-seed
+    if db.query(models.Block).first() is not None:
+        return
+
+    import sqlite3
+    seed_db_path = Path(__file__).resolve().parent / "pisa_backend.db"
+    if not seed_db_path.exists():
+        return
+
+    try:
+        conn = sqlite3.connect(seed_db_path)
+        cur = conn.cursor()
+
+        # 1. Blocks
+        cur.execute("SELECT id, title, category, desc, topics, badge, badge_class FROM blocks")
+        for row in cur.fetchall():
+            db.add(models.Block(
+                id=row[0], title=row[1], category=row[2], desc=row[3],
+                topics=row[4], badge=row[5], badge_class=row[6]
+            ))
+        db.commit()
+
+        # 2. Topics
+        cur.execute("SELECT id, block_id, title, video_url, content, order_index, item_type, quiz_data FROM topics")
+        for row in cur.fetchall():
+            db.add(models.Topic(
+                id=row[0], block_id=row[1], title=row[2], video_url=row[3],
+                content=row[4], order_index=row[5], item_type=row[6], quiz_data=row[7]
+            ))
+        db.commit()
+
+        # 3. Groups
+        cur.execute("SELECT id, name, desc FROM groups")
+        for row in cur.fetchall():
+            db.add(models.Group(id=row[0], name=row[1], desc=row[2]))
+        db.commit()
+
+        # 4. Block-Group associations
+        cur.execute("SELECT block_id, group_id FROM block_group")
+        for row in cur.fetchall():
+            db.execute(models.block_group_association.insert().values(block_id=row[0], group_id=row[1]))
+        db.commit()
+
+        # 5. Students
+        cur.execute("SELECT id, name, initials, username, password, color, group_id, score FROM students")
+        for row in cur.fetchall():
+            db.add(models.Student(
+                id=row[0], name=row[1], initials=row[2], username=row[3],
+                password=row[4], color=row[5], group_id=row[6], score=row[7]
+            ))
+        db.commit()
+
+        # Reset Postgres sequences if using postgresql
+        from database import SQLALCHEMY_DATABASE_URL
+        if not SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+            from sqlalchemy import text
+            for table in ["settings", "blocks", "topics", "groups", "students", "quiz_attempts"]:
+                try:
+                    db.execute(text(f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), coalesce(max(id), 1), max(id) IS NOT null) FROM {table}"))
+                    db.commit()
+                except Exception:
+                    pass
+        conn.close()
+    except Exception as e:
+        print("Seed template error:", e)
+
+
 def init_db(db: Session):
     settings = db.query(models.Settings).first()
     if not settings:
@@ -256,11 +324,13 @@ def init_db(db: Session):
         db.add(default_settings)
         db.commit()
 
+
 @app.on_event("startup")
 def startup_event():
     db = SessionLocal()
     try:
         init_db(db)
+        seed_from_template_if_empty(db)
         settings = db.query(models.Settings).first()
         if not settings.password.startswith(PASSWORD_PREFIX):
             if production and not INITIAL_ADMIN_PASSWORD:
