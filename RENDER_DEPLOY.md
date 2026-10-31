@@ -71,7 +71,7 @@ Loyiha avtomatik ravishda tayyor demo ma'lumotlar bilan ishga tushadi:
 ### O'qituvchi (Teacher) paneli:
 - **Manzil**: `https://<sizning-domen>/teacher/` (yoki asosiy `https://<sizning-domen>/`)
 - **Login**: `admin` yoki `jasur@edumaster.uz`
-- **Parol**: `admin`
+- **Parol**: `Admin123456!` (yoki dastlabki `admin`)
 
 > Birinchi kirishdan so'ng **Sozlamalar -> Parolni o'zgartirish** orqali yangi kuchli parol o'rnating.
 

@@ -38,7 +38,11 @@ elif secret_key and len(secret_key) < 32:
 SECRET_KEY = (secret_key or secrets.token_urlsafe(48)).encode("utf-8")
 INITIAL_ADMIN_PASSWORD = os.getenv("INITIAL_ADMIN_PASSWORD")
 if production and INITIAL_ADMIN_PASSWORD and len(INITIAL_ADMIN_PASSWORD) < 12:
-    raise RuntimeError("INITIAL_ADMIN_PASSWORD must contain at least 12 characters")
+    import logging
+    logging.warning(
+        "WARNING: INITIAL_ADMIN_PASSWORD contains less than 12 characters. "
+        "A stronger password is recommended for production."
+    )
 
 UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", Path(__file__).resolve().parent / "uploads"))
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)

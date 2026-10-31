@@ -12,7 +12,7 @@ services:
       - key: APP_SECRET_KEY
         generateValue: true
       - key: INITIAL_ADMIN_PASSWORD
-        value: admin
+        value: Admin123456!
       - key: DATABASE_URL
         value: sqlite:////data/edumaster.db
       - key: UPLOADS_DIR
