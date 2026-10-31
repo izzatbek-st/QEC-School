@@ -81,6 +81,17 @@ const Login = ({ onLogin }) => {
             Tizimga kirish
           </button>
         </form>
+
+        <div className="mt-6 text-center pt-5 border-t border-gray-100 dark:border-gray-700">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Siz o'qituvchimisiz?</p>
+          <a 
+            href="/teacher/" 
+            className="inline-flex items-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 transition-colors"
+          >
+            <i className="fa-solid fa-chalkboard-user mr-2"></i>
+            O'qituvchi paneliga o'tish &rarr;
+          </a>
+        </div>
       </div>
     </div>
   );

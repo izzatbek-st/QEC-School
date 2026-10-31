@@ -44,6 +44,17 @@ const Sidebar = ({ isOpen, toggleSidebar, onLogout }) => {
             <i className="fa-solid fa-gear w-5"></i>
             <span>Sozlamalar</span>
           </NavLink>
+          <a 
+            href="/student/" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="w-full flex items-center space-x-3 py-3 px-4 rounded-xl text-indigo-200 hover:bg-indigo-800/50 hover:text-white font-medium transition duration-150 border-t border-indigo-800/50 mt-2"
+            title="O'quvchi panelini yangi oynada ochish"
+          >
+            <i className="fa-solid fa-graduation-cap w-5 text-indigo-300"></i>
+            <span>O'quvchi paneli</span>
+            <i className="fa-solid fa-arrow-up-right-from-square text-xs ml-auto opacity-70"></i>
+          </a>
         </nav>
       </div>
 

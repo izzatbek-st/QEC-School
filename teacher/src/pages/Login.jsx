@@ -96,6 +96,17 @@ const Login = ({ onLogin }) => {
             Tizimga kirish
           </button>
         </form>
+
+        <div className="mt-6 text-center pt-5 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-2">Siz o'quvchimisiz?</p>
+          <a 
+            href="/student/" 
+            className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+          >
+            <i className="fa-solid fa-graduation-cap mr-2"></i>
+            O'quvchi paneliga o'tish &rarr;
+          </a>
+        </div>
       </div>
     </div>
   );
