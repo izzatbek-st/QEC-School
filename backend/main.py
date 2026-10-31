@@ -14,6 +14,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -73,7 +74,7 @@ class SinglePageApplication(StaticFiles):
             if response.status_code == 404 and "." not in Path(path).name:
                 return await super().get_response(self.index_file, scope)
             return response
-        except HTTPException as exc:
+        except (HTTPException, StarletteHTTPException) as exc:
             if exc.status_code == 404 and "." not in Path(path).name:
                 return await super().get_response(self.index_file, scope)
             raise exc
