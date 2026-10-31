@@ -1,0 +1,100 @@
+from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
+
+class SettingsBase(BaseModel):
+    name: str
+    email: str
+    avatar_url: str
+    logo_url: str
+    theme: str
+
+class SettingsCreate(SettingsBase):
+    pass
+
+class Settings(SettingsBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# --- Auth ---
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class TeacherPasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+class QuizSubmission(BaseModel):
+    answers: Dict[str, Any] = Field(default_factory=dict)
+
+# --- Student ---
+class StudentBase(BaseModel):
+    name: str
+    initials: str
+    username: str
+    color: Optional[str] = "bg-indigo-100 text-indigo-600"
+    score: Optional[int] = 0
+
+class StudentCreate(StudentBase):
+    password: str = Field(min_length=8, max_length=128)
+
+class StudentUpdate(BaseModel):
+    username: str
+    password: str = Field(min_length=8, max_length=128)
+
+class Student(StudentBase):
+    id: int
+    group_id: int
+    class Config:
+        from_attributes = True
+
+# --- Group ---
+class GroupBase(BaseModel):
+    name: str
+    desc: str
+
+class GroupCreate(GroupBase):
+    pass
+
+class Group(GroupBase):
+    id: int
+    students: List[Student] = []
+    class Config:
+        from_attributes = True
+
+# --- Block ---
+class BlockBase(BaseModel):
+    title: str
+    category: str
+    desc: str
+    topics: int = 0
+    badge: str
+    badge_class: str
+
+class TopicBase(BaseModel):
+    title: str
+    video_url: Optional[str] = None
+    content: str
+    order_index: int = 0
+    item_type: Optional[str] = "lesson"
+    quiz_data: Optional[str] = None
+
+class TopicCreate(TopicBase):
+    pass
+
+class Topic(TopicBase):
+    id: int
+    block_id: int
+    class Config:
+        from_attributes = True
+
+class BlockCreate(BlockBase):
+    group_ids: List[int] = []
+
+class Block(BlockBase):
+    id: int
+    groups: List[Group] = []
+    topics_list: List[Topic] = []
+    class Config:
+        from_attributes = True

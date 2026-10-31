@@ -1,0 +1,88 @@
+.ql-editor {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.ql-editor p {
+  margin: 0 0 0.75rem;
+  white-space: pre-wrap;
+}
+
+.ql-editor h1,
+.ql-editor h2,
+.ql-editor h3 {
+  margin: 1.2rem 0 0.6rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.ql-editor h1 {
+  font-size: 1.875rem;
+}
+
+.ql-editor h2 {
+  font-size: 1.5rem;
+}
+
+.ql-editor h3 {
+  font-size: 1.25rem;
+}
+
+.ql-editor ol,
+.ql-editor ul {
+  margin: 0.5rem 0;
+  padding-left: 1.75rem;
+}
+
+.ql-editor ol {
+  list-style: decimal;
+}
+
+.ql-editor ul {
+  list-style: disc;
+}
+
+.ql-editor li {
+  padding-left: 0.25rem;
+}
+
+.ql-editor blockquote {
+  margin: 1rem 0;
+  padding-left: 1rem;
+  border-left: 4px solid #a5b4fc;
+}
+
+.ql-editor pre {
+  overflow-x: auto;
+  margin: 1rem 0;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: #f3f4f6;
+  white-space: pre-wrap;
+}
+
+.ql-editor img,
+.ql-editor video {
+  max-width: 100%;
+  height: auto;
+}
+
+.ql-editor .ql-align-center {
+  text-align: center;
+}
+
+.ql-editor .ql-align-right {
+  text-align: right;
+}
+
+.ql-editor .ql-align-justify {
+  text-align: justify;
+}
+
+.ql-editor .ql-indent-1 {
+  padding-left: 3rem;
+}
+
+.ql-editor .ql-indent-2 {
+  padding-left: 6rem;
+}

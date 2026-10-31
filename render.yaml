@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: edumaster
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_SECRET_KEY
+        generateValue: true
+      - key: INITIAL_ADMIN_PASSWORD
+        value: admin
+      - key: DATABASE_URL
+        value: sqlite:////data/edumaster.db
+      - key: UPLOADS_DIR
+        value: /data/uploads
+      - key: OVERWRITE_ADMIN_PASSWORD
+        value: "false"
+
+    # Agar Render-da pullik tarifdan foydalanib ma'lumotlarni saqlab qolish
+    # uchun Persistent Disk qo'shmoqchi bo'lsangiz quyidagi qatorlarni faollashtiring:
+    # disk:
+    #   name: edumaster-data
+    #   mountPath: /data
+    #   sizeGB: 1
