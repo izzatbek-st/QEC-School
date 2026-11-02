@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api';
 
-const QuizViewer = ({ qDataList, topicId, initialAttempt = null, isCompleted = false, onComplete = null, passingScore = 70 }) => {
+const QuizViewer = ({ qDataList, topicId, initialAttempt = null, isCompleted = false, onComplete = null, passingScore = 70, onNextLesson = null }) => {
   const [answers, setAnswers] = useState({});
   const [showResult, setShowResult] = useState(false);
   const [quizScore, setQuizScore] = useState(null);
@@ -222,41 +222,54 @@ const QuizViewer = ({ qDataList, topicId, initialAttempt = null, isCompleted = f
             </div>
           </div>
 
-          {/* FILTER CONTROLS */}
-          <div className="flex items-center gap-2 pt-2 flex-wrap">
-            <span className="text-xs text-indigo-200 font-semibold mr-1">Ko'rish:</span>
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition ${
-                filter === 'all'
-                  ? 'bg-white text-indigo-900 shadow-md'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-            >
-              Barcha savollar ({total})
-            </button>
-            <button
-              onClick={() => setFilter('wrong')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
-                filter === 'wrong'
-                  ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30'
-                  : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200'
-              }`}
-            >
-              <i className="fa-solid fa-circle-xmark text-xs"></i>
-              Faqat xatolar ({incorrect})
-            </button>
-            <button
-              onClick={() => setFilter('correct')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
-                filter === 'correct'
-                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30'
-                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200'
-              }`}
-            >
-              <i className="fa-solid fa-circle-check text-xs"></i>
-              To'g'ri javoblar ({correct})
-            </button>
+          {/* FILTER CONTROLS & NEXT LESSON ACTION */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-white/80 font-semibold mr-1">Ko'rish:</span>
+              <button
+                onClick={() => setFilter('all')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+                  filter === 'all'
+                    ? 'bg-white text-indigo-900 shadow-md font-bold'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                Barcha savollar ({total})
+              </button>
+              <button
+                onClick={() => setFilter('wrong')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                  filter === 'wrong'
+                    ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30 font-bold'
+                    : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200'
+                }`}
+              >
+                <i className="fa-solid fa-circle-xmark text-xs"></i>
+                Faqat xatolar ({incorrect})
+              </button>
+              <button
+                onClick={() => setFilter('correct')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+                  filter === 'correct'
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30 font-bold'
+                    : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200'
+                }`}
+              >
+                <i className="fa-solid fa-circle-check text-xs"></i>
+                To'g'ri javoblar ({correct})
+              </button>
+            </div>
+
+            {isPassed && onNextLesson && (
+              <button
+                type="button"
+                onClick={onNextLesson}
+                className="w-full sm:w-auto px-5 py-2.5 bg-white text-emerald-950 font-bold rounded-xl text-xs sm:text-sm transition hover:bg-emerald-50 active:scale-95 shadow-lg shadow-black/20 flex items-center justify-center gap-2 shrink-0"
+              >
+                <span>Keyingi darsga o'tish</span>
+                <i className="fa-solid fa-arrow-right"></i>
+              </button>
+            )}
           </div>
         </div>
       )}

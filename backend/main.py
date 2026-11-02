@@ -225,6 +225,7 @@ def student_topic_payload(
     student_id: int,
     db: Session = None,
     attempt: models.QuizAttempt = None,
+    is_lesson_completed: bool = False,
 ) -> dict:
     passing_score = topic.passing_score if topic.passing_score is not None else 70
     payload = {
@@ -250,10 +251,11 @@ def student_topic_payload(
             ).first()
 
         if attempt is not None:
-            payload["completed"] = True
+            score_pct = round((attempt.best_score / (attempt.total_questions or 1)) * 100)
+            is_passed = score_pct >= passing_score
+            payload["completed"] = is_passed
             questions = json.loads(attempt.results_data) if attempt.results_data else None
             answers = json.loads(attempt.answers_data) if attempt.answers_data else {}
-            score_pct = round((attempt.best_score / (attempt.total_questions or 1)) * 100)
             payload["attempt"] = {
                 "id": attempt.id,
                 "correct": attempt.best_score,
@@ -262,7 +264,7 @@ def student_topic_payload(
                 "score": attempt.best_score,
                 "best_score": attempt.best_score,
                 "percentage": score_pct,
-                "is_passed": score_pct >= passing_score,
+                "is_passed": is_passed,
                 "passing_score": passing_score,
                 "attempt_count": attempt.attempt_count,
                 "created_at": (attempt.created_at or attempt.updated_at).isoformat() if (attempt.created_at or attempt.updated_at) else None,
@@ -277,6 +279,16 @@ def student_topic_payload(
             payload["quiz_data"] = public_quiz_data(
                 questions, SECRET_KEY, student_id, topic.id
             )
+    else:
+        if is_lesson_completed:
+            payload["completed"] = True
+        elif db is not None:
+            comp = db.query(models.LessonCompletion).filter(
+                models.LessonCompletion.student_id == student_id,
+                models.LessonCompletion.topic_id == topic.id,
+            ).first()
+            if comp is not None:
+                payload["completed"] = True
     return payload
 
 
@@ -366,15 +378,42 @@ def ensure_quiz_attempts_columns():
                 t_cols = [row[1] for row in cursor.fetchall()]
                 if "passing_score" not in t_cols:
                     cursor.execute("ALTER TABLE topics ADD COLUMN passing_score INTEGER DEFAULT 70")
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS lesson_completions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        student_id INTEGER NOT NULL,
+                        topic_id INTEGER NOT NULL,
+                        completed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_student_lesson_completion UNIQUE (student_id, topic_id),
+                        FOREIGN KEY(student_id) REFERENCES students(id),
+                        FOREIGN KEY(topic_id) REFERENCES topics(id)
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS ix_lesson_completions_student_id ON lesson_completions (student_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS ix_lesson_completions_topic_id ON lesson_completions (topic_id)")
                 conn.connection.commit()
             else:
                 conn.execute(text("ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS answers_data TEXT"))
                 conn.execute(text("ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS results_data TEXT"))
                 conn.execute(text("ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
                 conn.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS passing_score INTEGER DEFAULT 70"))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS lesson_completions (
+                        id SERIAL PRIMARY KEY,
+                        student_id INTEGER NOT NULL,
+                        topic_id INTEGER NOT NULL,
+                        completed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_student_lesson_completion UNIQUE (student_id, topic_id)
+                    )
+                """))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lesson_completions_student_id ON lesson_completions (student_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lesson_completions_topic_id ON lesson_completions (topic_id)"))
                 conn.commit()
     except Exception as e:
         print("ensure_quiz_attempts_columns notice:", e)
+
+# Ensure schema migrations are applied immediately on import
+ensure_quiz_attempts_columns()
 
 
 def init_db(db: Session):
@@ -775,42 +814,57 @@ def get_topics_for_block(
     ).all()
     attempts_by_topic = {a.topic_id: a for a in attempts}
 
+    completions = db.query(models.LessonCompletion).filter(
+        models.LessonCompletion.student_id == student_id,
+        models.LessonCompletion.topic_id.in_(topic_ids)
+    ).all()
+    completed_lesson_topic_ids = {c.topic_id for c in completions}
+
     result = []
-    blocking_quiz = None
+    blocking_topic = None
+    blocking_reason = None
+
     for t in topics:
-        payload = student_topic_payload(t, student_id, db, attempts_by_topic.get(t.id))
-        if blocking_quiz is not None:
+        is_lesson_done = t.id in completed_lesson_topic_ids
+        payload = student_topic_payload(t, student_id, db, attempts_by_topic.get(t.id), is_lesson_completed=is_lesson_done)
+        if blocking_topic is not None:
             payload["is_locked"] = True
-            req_pct = blocking_quiz.passing_score if blocking_quiz.passing_score is not None else 70
-            att = attempts_by_topic.get(blocking_quiz.id)
-            if att and att.total_questions > 0:
-                user_pct = round((att.best_score / att.total_questions) * 100)
-                payload["locked_reason"] = (
-                    f"Ushbu mavzuga o'tish uchun avval «{blocking_quiz.title}» testidan "
-                    f"kamida {req_pct}% to'plashingiz kerak (Sizning natijangiz: {user_pct}%)."
-                )
-            else:
-                payload["locked_reason"] = (
-                    f"Ushbu mavzuga o'tish uchun avval «{blocking_quiz.title}» testini "
-                    f"kamida {req_pct}% natija bilan topshirishingiz shart."
-                )
+            payload["locked_reason"] = blocking_reason
         else:
             payload["is_locked"] = False
             payload["locked_reason"] = None
 
         result.append(payload)
 
-        # If this topic is a quiz, check if it was passed
+        # Check if topic t is completed to decide whether future topics are blocked
         if t.item_type == "quiz":
             req_pct = t.passing_score if t.passing_score is not None else 70
             att = attempts_by_topic.get(t.id)
             is_passed = False
+            user_pct = 0
             if att and att.total_questions > 0:
                 user_pct = round((att.best_score / att.total_questions) * 100)
                 if user_pct >= req_pct:
                     is_passed = True
-            if not is_passed and blocking_quiz is None:
-                blocking_quiz = t
+            if not is_passed and blocking_topic is None:
+                blocking_topic = t
+                if att and att.total_questions > 0:
+                    blocking_reason = (
+                        f"Ushbu darsga o'tish uchun avval «{t.title}» testidan "
+                        f"kamida {req_pct}% to'plashingiz kerak (Sizning natijangiz: {user_pct}%)."
+                    )
+                else:
+                    blocking_reason = (
+                        f"Ushbu darsga o'tish uchun avval «{t.title}» testini "
+                        f"kamida {req_pct}% natija bilan topshirishingiz shart."
+                    )
+        else:
+            if not is_lesson_done and blocking_topic is None:
+                blocking_topic = t
+                blocking_reason = (
+                    f"Ushbu darsga o'tish uchun avval «{t.title}» mavzusini o'rganib, "
+                    f"'Keyingi dars' tugmasini bosishingiz kerak."
+                )
 
     return result
 
@@ -831,27 +885,34 @@ def get_topic(
         models.Topic.block_id == db_topic.block_id
     ).order_by(models.Topic.order_index).all()
     student_id = current_user["sub"]
+    topic_ids = [t.id for t in topics_in_block]
+
     attempts = db.query(models.QuizAttempt).filter(
         models.QuizAttempt.student_id == student_id,
-        models.QuizAttempt.topic_id.in_([t.id for t in topics_in_block])
+        models.QuizAttempt.topic_id.in_(topic_ids)
     ).all()
     attempts_by_topic = {a.topic_id: a for a in attempts}
 
-    blocking_quiz = None
+    completions = db.query(models.LessonCompletion).filter(
+        models.LessonCompletion.student_id == student_id,
+        models.LessonCompletion.topic_id.in_(topic_ids)
+    ).all()
+    completed_lesson_topic_ids = {c.topic_id for c in completions}
+
+    blocking_topic = None
+    blocking_reason = None
+
     for t in topics_in_block:
+        is_lesson_done = t.id in completed_lesson_topic_ids
         if t.id == db_topic.id:
-            payload = student_topic_payload(db_topic, student_id, db, attempts_by_topic.get(db_topic.id))
-            if blocking_quiz is not None:
-                req_pct = blocking_quiz.passing_score if blocking_quiz.passing_score is not None else 70
-                att = attempts_by_topic.get(blocking_quiz.id)
-                if att and att.total_questions > 0:
-                    user_pct = round((att.best_score / att.total_questions) * 100)
-                    msg = f"Ushbu mavzuga o'tish uchun avval «{blocking_quiz.title}» testidan kamida {req_pct}% to'plashingiz kerak (Sizning natijangiz: {user_pct}%)."
-                else:
-                    msg = f"Ushbu mavzuga o'tish uchun avval «{blocking_quiz.title}» testini kamida {req_pct}% natija bilan topshirishingiz shart."
+            payload = student_topic_payload(
+                db_topic, student_id, db, attempts_by_topic.get(db_topic.id),
+                is_lesson_completed=is_lesson_done
+            )
+            if blocking_topic is not None:
                 payload["is_locked"] = True
-                payload["locked_reason"] = msg
-                raise HTTPException(status_code=403, detail=msg)
+                payload["locked_reason"] = blocking_reason
+                raise HTTPException(status_code=403, detail=blocking_reason)
             else:
                 payload["is_locked"] = False
                 payload["locked_reason"] = None
@@ -861,14 +922,105 @@ def get_topic(
             req_pct = t.passing_score if t.passing_score is not None else 70
             att = attempts_by_topic.get(t.id)
             is_passed = False
+            user_pct = 0
             if att and att.total_questions > 0:
                 user_pct = round((att.best_score / att.total_questions) * 100)
                 if user_pct >= req_pct:
                     is_passed = True
-            if not is_passed and blocking_quiz is None:
-                blocking_quiz = t
+            if not is_passed and blocking_topic is None:
+                blocking_topic = t
+                if att and att.total_questions > 0:
+                    blocking_reason = (
+                        f"Ushbu darsga o'tish uchun avval «{t.title}» testidan "
+                        f"kamida {req_pct}% to'plashingiz kerak (Sizning natijangiz: {user_pct}%)."
+                    )
+                else:
+                    blocking_reason = (
+                        f"Ushbu darsga o'tish uchun avval «{t.title}» testini "
+                        f"kamida {req_pct}% natija bilan topshirishingiz shart."
+                    )
+        else:
+            if not is_lesson_done and blocking_topic is None:
+                blocking_topic = t
+                blocking_reason = (
+                    f"Ushbu darsga o'tish uchun avval «{t.title}» mavzusini o'rganib, "
+                    f"'Keyingi dars' tugmasini bosishingiz kerak."
+                )
 
-    return student_topic_payload(db_topic, student_id, db, attempts_by_topic.get(db_topic.id))
+    return student_topic_payload(
+        db_topic, student_id, db, attempts_by_topic.get(db_topic.id),
+        is_lesson_completed=(db_topic.id in completed_lesson_topic_ids)
+    )
+
+
+@app.post("/api/student/topics/{topic_id}/complete")
+def complete_lesson(
+    topic_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Faqat o'quvchilar darsni yakunlashi mumkin")
+    
+    student_id = current_user["sub"]
+    topic = db.query(models.Topic).filter(models.Topic.id == topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    
+    authorize_block(topic.block, current_user, db)
+
+    if topic.item_type != "topic":
+        raise HTTPException(
+            status_code=400,
+            detail="Faqat dars mavzularini yakunlash mumkin. Testlarni topshirish orqali yakunlang."
+        )
+
+    # Check if this topic itself is currently locked for student
+    topics_in_block = db.query(models.Topic).filter(
+        models.Topic.block_id == topic.block_id
+    ).order_by(models.Topic.order_index).all()
+    topic_ids = [t.id for t in topics_in_block]
+
+    attempts = db.query(models.QuizAttempt).filter(
+        models.QuizAttempt.student_id == student_id,
+        models.QuizAttempt.topic_id.in_(topic_ids)
+    ).all()
+    attempts_by_topic = {a.topic_id: a for a in attempts}
+
+    completions = db.query(models.LessonCompletion).filter(
+        models.LessonCompletion.student_id == student_id,
+        models.LessonCompletion.topic_id.in_(topic_ids)
+    ).all()
+    completed_lesson_topic_ids = {c.topic_id for c in completions}
+
+    for t in topics_in_block:
+        if t.id == topic.id:
+            break
+        if t.item_type == "quiz":
+            req_pct = t.passing_score if t.passing_score is not None else 70
+            att = attempts_by_topic.get(t.id)
+            if not att or att.total_questions == 0 or round((att.best_score / att.total_questions) * 100) < req_pct:
+                raise HTTPException(status_code=403, detail=f"Avval «{t.title}» testidan o'tishingiz kerak.")
+        else:
+            if t.id not in completed_lesson_topic_ids:
+                raise HTTPException(status_code=403, detail=f"Avval «{t.title}» mavzusini yakunlashingiz kerak.")
+
+    # Record completion if not exists
+    existing = db.query(models.LessonCompletion).filter(
+        models.LessonCompletion.student_id == student_id,
+        models.LessonCompletion.topic_id == topic_id
+    ).first()
+
+    if not existing:
+        comp = models.LessonCompletion(
+            student_id=student_id,
+            topic_id=topic_id,
+            completed_at=datetime.utcnow(),
+        )
+        db.add(comp)
+        db.commit()
+
+    return {"message": "Mavzu muvaffaqiyatli yakunlandi", "completed": True}
 
 
 @app.post("/api/student/topics/{topic_id}/attempts")
@@ -897,6 +1049,36 @@ def submit_quiz_attempt(
     ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
+
+    # Verify that this quiz is not locked for the student
+    topics_in_block = db.query(models.Topic).filter(
+        models.Topic.block_id == topic.block_id
+    ).order_by(models.Topic.order_index).all()
+    topic_ids = [t.id for t in topics_in_block]
+
+    attempts = db.query(models.QuizAttempt).filter(
+        models.QuizAttempt.student_id == student.id,
+        models.QuizAttempt.topic_id.in_(topic_ids)
+    ).all()
+    attempts_by_topic = {a.topic_id: a for a in attempts}
+
+    completions = db.query(models.LessonCompletion).filter(
+        models.LessonCompletion.student_id == student.id,
+        models.LessonCompletion.topic_id.in_(topic_ids)
+    ).all()
+    completed_lesson_topic_ids = {c.topic_id for c in completions}
+
+    for t in topics_in_block:
+        if t.id == topic.id:
+            break
+        if t.item_type == "quiz":
+            req_pct = t.passing_score if t.passing_score is not None else 70
+            att = attempts_by_topic.get(t.id)
+            if not att or att.total_questions == 0 or round((att.best_score / att.total_questions) * 100) < req_pct:
+                raise HTTPException(status_code=403, detail=f"Avval «{t.title}» testidan o'tishingiz kerak.")
+        else:
+            if t.id not in completed_lesson_topic_ids:
+                raise HTTPException(status_code=403, detail=f"Avval «{t.title}» mavzusini yakunlashingiz kerak.")
 
     existing_attempt = db.query(models.QuizAttempt).filter(
         models.QuizAttempt.student_id == student.id,

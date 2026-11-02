@@ -92,3 +92,18 @@ class QuizAttempt(Base):
 
     student = relationship("Student", backref="quiz_attempts")
     topic = relationship("Topic", backref="quiz_attempts")
+
+
+class LessonCompletion(Base):
+    __tablename__ = "lesson_completions"
+    __table_args__ = (
+        UniqueConstraint("student_id", "topic_id", name="uq_student_lesson_completion"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+    topic_id = Column(Integer, ForeignKey("topics.id"), nullable=False, index=True)
+    completed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    student = relationship("Student", backref="lesson_completions")
+    topic = relationship("Topic", backref="lesson_completions")
