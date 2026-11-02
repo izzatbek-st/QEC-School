@@ -862,8 +862,8 @@ def get_topics_for_block(
             if not is_lesson_done and blocking_topic is None:
                 blocking_topic = t
                 blocking_reason = (
-                    f"Ushbu darsga o'tish uchun avval «{t.title}» mavzusini o'rganib, "
-                    f"'Keyingi dars' tugmasini bosishingiz kerak."
+                    f"Ushbu darsga o'tish uchun avval «{t.title.strip()}» mavzusini o'qib, "
+                    f"'Mavzuni o'qidim' tugmasini bosishingiz kerak."
                 )
 
     return result
@@ -943,8 +943,8 @@ def get_topic(
             if not is_lesson_done and blocking_topic is None:
                 blocking_topic = t
                 blocking_reason = (
-                    f"Ushbu darsga o'tish uchun avval «{t.title}» mavzusini o'rganib, "
-                    f"'Keyingi dars' tugmasini bosishingiz kerak."
+                    f"Ushbu darsga o'tish uchun avval «{t.title.strip()}» mavzusini o'qib, "
+                    f"'Mavzuni o'qidim' tugmasini bosishingiz kerak."
                 )
 
     return student_topic_payload(
@@ -969,7 +969,7 @@ def complete_lesson(
     
     authorize_block(topic.block, current_user, db)
 
-    if topic.item_type != "topic":
+    if topic.item_type == "quiz":
         raise HTTPException(
             status_code=400,
             detail="Faqat dars mavzularini yakunlash mumkin. Testlarni topshirish orqali yakunlang."
@@ -1000,10 +1000,10 @@ def complete_lesson(
             req_pct = t.passing_score if t.passing_score is not None else 70
             att = attempts_by_topic.get(t.id)
             if not att or att.total_questions == 0 or round((att.best_score / att.total_questions) * 100) < req_pct:
-                raise HTTPException(status_code=403, detail=f"Avval «{t.title}» testidan o'tishingiz kerak.")
+                raise HTTPException(status_code=403, detail=f"Avval «{t.title.strip()}» testidan o'tishingiz kerak.")
         else:
             if t.id not in completed_lesson_topic_ids:
-                raise HTTPException(status_code=403, detail=f"Avval «{t.title}» mavzusini yakunlashingiz kerak.")
+                raise HTTPException(status_code=403, detail=f"Avval «{t.title.strip()}» mavzusini o'qib tasdiqlashingiz kerak.")
 
     # Record completion if not exists
     existing = db.query(models.LessonCompletion).filter(

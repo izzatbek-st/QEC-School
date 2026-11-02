@@ -13,6 +13,7 @@ const LessonViewer = () => {
   const [loading, setLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState(false);
   const [lockedModal, setLockedModal] = useState({ isOpen: false, title: '', reason: '' });
+  const [completionSuccess, setCompletionSuccess] = useState(false);
 
   const fetchTopics = () => {
     return apiFetch(`${API_URL}/blocks/${id}/topics`)
@@ -31,6 +32,10 @@ const LessonViewer = () => {
   useEffect(() => {
     fetchTopics();
   }, [id]);
+
+  useEffect(() => {
+    setCompletionSuccess(false);
+  }, [activeIndex]);
 
   if (loading) {
     return <div className="p-8 text-center text-gray-500">Yuklanmoqda...</div>;
@@ -51,47 +56,56 @@ const LessonViewer = () => {
   const activeTopic = topics[activeIndex] || topics[0];
   const nextTopic = activeIndex < topics.length - 1 ? topics[activeIndex + 1] : null;
 
-  const handleNextLesson = async () => {
+  const handleMarkAsRead = async () => {
+    if (!activeTopic || activeTopic.item_type === 'quiz' || activeTopic.completed || isCompleting) return;
+
+    setIsCompleting(true);
+    try {
+      const res = await apiFetch(`${API_URL}/student/topics/${activeTopic.id}/complete`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        await fetchTopics();
+        setCompletionSuccess(true);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setLockedModal({
+          isOpen: true,
+          title: activeTopic.title,
+          reason: err.detail || "Darsni yakunlashda xatolik yuz berdi."
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
+  const handleNextLesson = () => {
+    if (activeIndex >= topics.length - 1) return;
+
     // 1. If current topic is a quiz and it's not completed / not passed:
     if (activeTopic.item_type === 'quiz' && !activeTopic.completed) {
       setLockedModal({
         isOpen: true,
         title: activeTopic.title,
-        reason: `Keyingi darsga o'tish uchun avval ushbu testni topshirib, o'qituvchi belgilagan o'tish foizidan (${activeTopic.passing_score ?? 70}%) yuqori ball to'plashingiz lozim.`
+        reason: `Keyingi darsga o'tish uchun avval ushbu testdan kamida ${activeTopic.passing_score ?? 70}% to'plashingiz lozim.`
       });
       return;
     }
 
-    // 2. If current topic is a lesson (topic) and it is not completed yet:
-    if (activeTopic.item_type === 'topic' && !activeTopic.completed) {
-      setIsCompleting(true);
-      try {
-        const res = await apiFetch(`${API_URL}/student/topics/${activeTopic.id}/complete`, {
-          method: 'POST',
-        });
-        if (res.ok) {
-          await fetchTopics();
-          if (activeIndex < topics.length - 1) {
-            setActiveIndex(activeIndex + 1);
-          }
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setLockedModal({
-            isOpen: true,
-            title: activeTopic.title,
-            reason: err.detail || "Darsni yakunlashda xatolik yuz berdi."
-          });
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsCompleting(false);
-      }
+    // 2. If current topic is a lesson and it is not completed yet:
+    if (activeTopic.item_type !== 'quiz' && !activeTopic.completed) {
+      setLockedModal({
+        isOpen: true,
+        title: activeTopic.title,
+        reason: "Keyingi darsga o'tish uchun avval ushbu mavzuni to'liq o'qib chiqib, sahifa pastidagi «Mavzuni o'qidim» tugmasini bosishingiz kerak."
+      });
       return;
     }
 
-    // 3. If currently completed: check if next topic is locked or if it's the end of the block
-    if (activeIndex >= topics.length - 1) return;
+    // 3. If next topic is locked:
     if (nextTopic?.is_locked) {
       setLockedModal({
         isOpen: true,
@@ -100,6 +114,7 @@ const LessonViewer = () => {
       });
       return;
     }
+
     setActiveIndex(activeIndex + 1);
   };
 
@@ -177,38 +192,35 @@ const LessonViewer = () => {
             
             <button 
               onClick={handleNextLesson}
-              disabled={isCompleting || (activeIndex === topics.length - 1 && activeTopic.completed)}
+              disabled={activeIndex === topics.length - 1}
               className={`px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-1.5 active:scale-95 ${
-                activeTopic.item_type === 'quiz' && !activeTopic.completed
-                  ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-300/50 cursor-pointer shadow-sm'
-                  : activeTopic.item_type === 'topic' && !activeTopic.completed
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20'
-                    : nextTopic?.is_locked
-                      ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-300/50 cursor-pointer shadow-sm'
-                      : 'bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-md shadow-indigo-600/20'
+                activeIndex === topics.length - 1
+                  ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800 text-gray-500'
+                  : (activeTopic.item_type !== 'quiz' && !activeTopic.completed)
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/50 cursor-pointer shadow-sm'
+                    : (activeTopic.item_type === 'quiz' && !activeTopic.completed)
+                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/50 cursor-pointer shadow-sm'
+                      : nextTopic?.is_locked
+                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/50 cursor-pointer shadow-sm'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20'
               }`}
-              title={nextTopic?.is_locked ? nextTopic.locked_reason : undefined}
+              title={
+                activeTopic.item_type !== 'quiz' && !activeTopic.completed
+                  ? "Oldin pastdagi «Mavzuni o'qidim» tugmasini bosing"
+                  : activeTopic.item_type === 'quiz' && !activeTopic.completed
+                    ? `Avval testdan kamida ${activeTopic.passing_score ?? 70}% to'plashingiz kerak`
+                    : nextTopic?.is_locked
+                      ? nextTopic.locked_reason
+                      : undefined
+              }
             >
-              {isCompleting ? (
-                <>
-                  <i className="fa-solid fa-spinner fa-spin"></i>
-                  <span>Saqlanmoqda...</span>
-                </>
+              <span>Keyingi dars</span>
+              {((activeTopic.item_type !== 'quiz' && !activeTopic.completed) || 
+                (activeTopic.item_type === 'quiz' && !activeTopic.completed) || 
+                nextTopic?.is_locked) ? (
+                <i className="fa-solid fa-lock text-xs text-amber-600 dark:text-amber-400"></i>
               ) : (
-                <>
-                  <span>
-                    {activeTopic.item_type === 'topic' && !activeTopic.completed
-                      ? "Keyingi dars (Mavzuni o'qidim)"
-                      : "Keyingi dars"}
-                  </span>
-                  {activeTopic.item_type === 'quiz' && !activeTopic.completed ? (
-                    <i className="fa-solid fa-lock text-xs"></i>
-                  ) : nextTopic?.is_locked ? (
-                    <i className="fa-solid fa-lock text-xs"></i>
-                  ) : (
-                    <i className="fa-solid fa-angle-right"></i>
-                  )}
-                </>
+                <i className="fa-solid fa-angle-right"></i>
               )}
             </button>
           </div>
@@ -335,13 +347,13 @@ const LessonViewer = () => {
                       </div>
                     </div>
 
-                    {/* LESSON BOTTOM COMPLETION / NAVIGATION BAR */}
+                    {/* LESSON BOTTOM COMPLETION / CONFIRMATION BAR */}
                     <div className="mt-12 pt-6 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div>
                         <p className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
                           {activeTopic.completed ? (
                             <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                              <i className="fa-solid fa-circle-check"></i> Ushbu mavzuni o'qib bo'lgansiz
+                              <i className="fa-solid fa-circle-check"></i> Mavzuni o'qib bo'lgansiz
                             </span>
                           ) : (
                             <span className="text-gray-800 dark:text-gray-200">
@@ -351,38 +363,63 @@ const LessonViewer = () => {
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                           {activeTopic.completed 
-                            ? "Istalgan vaqtda qayta o'qishingiz yoki keyingi darsga o'tishingiz mumkin."
-                            : "Keyingi dars tugmasini bosish orqali bu mavzu yakunlanadi va navbatdagi dars ochiladi."}
+                            ? "Mavzu o'qilgan deb tasdiqlangan. Yuqoridagi «Keyingi dars» tugmasi orqali navbatdagi mavzuga o'tishingiz mumkin."
+                            : "«Mavzuni o'qidim» tugmasini bosish orqali tasdiqlang. Shunda yuqoridagi keyingi darsga o'tish tugmasi ochiladi."}
                         </p>
                       </div>
-                      <button
-                        onClick={handleNextLesson}
-                        disabled={isCompleting || (activeIndex === topics.length - 1 && activeTopic.completed)}
-                        className={`w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm transition shadow-lg flex items-center justify-center gap-2 active:scale-95 ${
-                          activeTopic.completed
-                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
-                        }`}
-                      >
-                        {isCompleting ? (
-                          <>
-                            <i className="fa-solid fa-spinner fa-spin"></i>
-                            <span>Saqlanmoqda...</span>
-                          </>
-                        ) : activeTopic.completed ? (
-                          <>
-                            <span>Keyingi dars</span>
-                            <i className="fa-solid fa-arrow-right"></i>
-                          </>
+
+                      <div className="w-full sm:w-auto flex items-center gap-3">
+                        {activeTopic.completed ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-2 cursor-default shadow-sm"
+                          >
+                            <i className="fa-solid fa-circle-check text-emerald-600 dark:text-emerald-400"></i>
+                            <span>Mavzuni o'qidim (Tasdiqlangan)</span>
+                          </button>
                         ) : (
-                          <>
-                            <i className="fa-solid fa-check"></i>
-                            <span>Keyingi dars (Mavzuni o'qidim)</span>
-                            <i className="fa-solid fa-arrow-right"></i>
-                          </>
+                          <button
+                            type="button"
+                            onClick={handleMarkAsRead}
+                            disabled={isCompleting}
+                            className="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm transition shadow-lg shadow-emerald-600/25 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            {isCompleting ? (
+                              <>
+                                <i className="fa-solid fa-spinner fa-spin"></i>
+                                <span>Tasdiqlanmoqda...</span>
+                              </>
+                            ) : (
+                              <>
+                                <i className="fa-solid fa-check"></i>
+                                <span>Mavzuni o'qidim</span>
+                              </>
+                            )}
+                          </button>
                         )}
-                      </button>
+                      </div>
                     </div>
+
+                    {/* COMPLETION SUCCESS ALERT BANNER */}
+                    {completionSuccess && (
+                      <div className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-emerald-900 dark:text-emerald-200 text-sm animate-in fade-in">
+                        <div className="flex items-center gap-2.5">
+                          <i className="fa-solid fa-circle-check text-emerald-600 dark:text-emerald-400 text-lg shrink-0"></i>
+                          <span>Mavzu muvaffaqiyatli o'qildi deb tasdiqlandi! Yuqoridagi <b>«Keyingi dars»</b> tugmasi ochildi.</span>
+                        </div>
+                        {activeIndex < topics.length - 1 && (
+                          <button
+                            type="button"
+                            onClick={handleNextLesson}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm shrink-0 active:scale-95 cursor-pointer"
+                          >
+                            <span>Keyingi darsga o'tish</span>
+                            <i className="fa-solid fa-arrow-right text-[10px]"></i>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
