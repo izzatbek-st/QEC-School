@@ -123,17 +123,18 @@ const BlockDetails = () => {
     
     for (let i = 0; i < quizData.length; i++) {
        const q = quizData[i];
-       if (!q.question.trim()) {
+       if (!q.question || !q.question.trim()) {
            alert(`${i + 1}-savol matnini kiriting!`);
            return;
        }
        const type = q.type || (q.isMultiSelect ? 'multiple_choice' : 'single_choice');
        if (type === 'single_choice' || type === 'multiple_choice') {
-           if (!q.options || !q.options.some(opt => opt.isCorrect)) {
+           const options = Array.isArray(q.options) ? q.options : [];
+           if (options.length === 0 || !options.some(opt => opt.isCorrect)) {
              alert(`${i + 1}-savol uchun kamida bitta to'g'ri javobni belgilang!`);
              return;
            }
-           if (q.options.some(opt => !opt.text.trim())) {
+           if (options.some(opt => !opt.text || !opt.text.trim())) {
              alert(`${i + 1}-savolning barcha variantlar matnini kiriting yoki bo'sh variantlarni o'chirib tashlang!`);
              return;
            }
@@ -159,31 +160,49 @@ const BlockDetails = () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
-    .then(res => res.json())
+    .then(async res => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Testni saqlashda xatolik yuz berdi");
+      }
+      return data;
+    })
     .then(() => {
       fetchTopics();
       setIsQuizModalOpen(false);
       setEditingTopic(null);
     })
-    .catch(console.error);
+    .catch(err => {
+      console.error(err);
+      alert(err.message || "Testni saqlashda xatolik yuz berdi");
+    });
   };
 
   const openEditModal = (topic) => {
     setEditingTopic(topic);
     if (topic.item_type === 'quiz') {
       try {
-        let parsed = JSON.parse(topic.quiz_data);
+        let parsed = typeof topic.quiz_data === 'string' ? JSON.parse(topic.quiz_data) : topic.quiz_data;
         if (!Array.isArray(parsed)) {
-            parsed = [{
-                id: Date.now(),
-                question: topic.title,
-                isMultiSelect: parsed.isMultiSelect || false,
-                options: parsed.options || []
-            }];
+          parsed = [{
+            id: Date.now().toString(),
+            type: parsed?.isMultiSelect ? 'multiple_choice' : 'single_choice',
+            question: topic.title,
+            isMultiSelect: parsed?.isMultiSelect || false,
+            options: parsed?.options || []
+          }];
+        } else {
+          parsed = parsed.map((q, idx) => ({
+            ...q,
+            id: q.id || (Date.now() + idx).toString(),
+            type: q.type || (q.isMultiSelect ? 'multiple_choice' : 'single_choice'),
+            options: Array.isArray(q.options) ? q.options : (['single_choice', 'multiple_choice'].includes(q.type) ? [] : undefined)
+          }));
         }
         setQuizData(parsed);
       } catch (e) {
         console.error("Quiz ma'lumotlarini o'qishda xatolik", e);
+        setQuizData([]);
       }
       setIsQuizModalOpen(true);
     } else {
@@ -202,7 +221,8 @@ const BlockDetails = () => {
     setEditingTopic(null);
     setQuizData([
       {
-        id: Date.now(),
+        id: Date.now().toString(),
+        type: 'single_choice',
         question: '',
         isMultiSelect: false,
         options: [
@@ -373,37 +393,135 @@ const BlockDetails = () => {
               </div>
               
               {topic.item_type === 'quiz' && topic.quiz_data && (() => {
-                let qDataList = [];
                 try {
-                  const parsed = JSON.parse(topic.quiz_data);
-                  qDataList = Array.isArray(parsed) ? parsed : [{
-                    question: topic.title,
-                    isMultiSelect: parsed.isMultiSelect,
-                    options: parsed.options
-                  }];
-                } catch(e) {}
-                
-                return (
-                  <div className="mt-3 ml-8 space-y-4">
-                    {qDataList.map((q, qIndex) => (
-                        <div key={qIndex} className="bg-gray-50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                          <p className="font-semibold text-gray-800 dark:text-gray-200 mb-2 text-[15px]">{qIndex + 1}. {q.question}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-3">
-                            {q.isMultiSelect ? 'Ko\'p variantli test' : 'Bir variantli test'}
-                          </p>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {q.options.map((opt, i) => (
-                              <div key={i} className={`text-sm px-3 py-2 rounded-lg border ${opt.isCorrect ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-400'}`}>
-                                <span className="font-semibold mr-2">{String.fromCharCode(65 + i)}.</span>
-                                {opt.text}
-                                {opt.isCorrect && <i className="fa-solid fa-circle-check float-right mt-0.5 opacity-75"></i>}
+                  let qDataList = [];
+                  const parsed = typeof topic.quiz_data === 'string' ? JSON.parse(topic.quiz_data) : topic.quiz_data;
+                  if (Array.isArray(parsed)) {
+                    qDataList = parsed;
+                  } else if (parsed && typeof parsed === 'object') {
+                    qDataList = [{
+                      id: 'legacy',
+                      question: topic.title,
+                      type: parsed.isMultiSelect ? 'multiple_choice' : 'single_choice',
+                      isMultiSelect: !!parsed.isMultiSelect,
+                      options: Array.isArray(parsed.options) ? parsed.options : []
+                    }];
+                  }
+
+                  if (!Array.isArray(qDataList) || qDataList.length === 0) {
+                    return (
+                      <div className="mt-3 ml-8 text-xs text-gray-400 italic">
+                        Savollar mavjud emas.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="mt-3 ml-8 space-y-4">
+                      {qDataList.map((q, qIndex) => {
+                        if (!q) return null;
+                        const type = q.type || (q.isMultiSelect ? 'multiple_choice' : 'single_choice');
+                        const options = Array.isArray(q.options) ? q.options : [];
+
+                        return (
+                          <div key={q.id || qIndex} className="bg-gray-50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <p className="font-semibold text-gray-800 dark:text-gray-200 text-[15px]">
+                                {qIndex + 1}. {q.question || topic.title || 'Savol'}
+                              </p>
+                              <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 shrink-0">
+                                {type === 'multiple_choice' ? "Ko'p variantli" :
+                                 type === 'true_false' ? "To'g'ri/Noto'g'ri" :
+                                 type === 'short_answer' ? "Qisqa javob" :
+                                 type === 'numeric' ? "Sonli javob" :
+                                 type === 'matching' ? "Moslashtirish" :
+                                 type === 'sequence' ? "Ketma-ketlik" :
+                                 type === 'fill_blanks' ? "Bo'sh joylar" :
+                                 type === 'dropdown' ? "Ro'yxatdan tanlash" :
+                                 type === 'essay' ? "Esse" :
+                                 "Bir variantli test"}
+                              </span>
+                            </div>
+
+                            {/* Options for single/multiple choice */}
+                            {options.length > 0 && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                                {options.map((opt, i) => (
+                                  <div 
+                                    key={opt.id || i} 
+                                    className={`text-sm px-3 py-2 rounded-lg border flex items-center justify-between ${
+                                      opt.isCorrect 
+                                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 font-medium' 
+                                        : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-400'
+                                    }`}
+                                  >
+                                    <div>
+                                      <span className="font-semibold mr-2">{String.fromCharCode(65 + i)}.</span>
+                                      <span>{opt.text || ''}</span>
+                                    </div>
+                                    {opt.isCorrect && <i className="fa-solid fa-circle-check text-green-600 dark:text-green-400 shrink-0 ml-2"></i>}
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            )}
+
+                            {/* True/False preview */}
+                            {type === 'true_false' && (
+                              <div className="text-xs text-gray-600 dark:text-gray-300 mt-2 flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                                <span className="font-medium text-gray-500">To'g'ri javob:</span>
+                                <span className="font-bold text-green-600 dark:text-green-400">
+                                  {q.correct_answer === 'true' ? "To'g'ri" : "Noto'g'ri"}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Short answer / Numeric preview */}
+                            {(type === 'short_answer' || type === 'numeric') && (
+                              <div className="text-xs text-gray-600 dark:text-gray-300 mt-2 flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                                <span className="font-medium text-gray-500">To'g'ri javob:</span>
+                                <span className="font-bold text-green-600 dark:text-green-400 font-mono">
+                                  {q.correct_answer || "—"}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Matching preview */}
+                            {type === 'matching' && Array.isArray(q.pairs) && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-xs">
+                                {q.pairs.map((p, idx) => (
+                                  <div key={idx} className="p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                    <span className="text-gray-700 dark:text-gray-300">{p.left}</span>
+                                    <i className="fa-solid fa-arrow-right text-gray-400 mx-2"></i>
+                                    <span className="font-bold text-green-600 dark:text-green-400">{p.right}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Sequence preview */}
+                            {type === 'sequence' && Array.isArray(q.items) && (
+                              <div className="space-y-1.5 mt-2 text-xs">
+                                {q.items.map((item, idx) => (
+                                  <div key={idx} className="p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2">
+                                    <span className="font-bold text-indigo-600">{idx + 1}.</span>
+                                    <span className="text-gray-700 dark:text-gray-300">{item.text}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                    ))}
-                  </div>
-                );
+                        );
+                      })}
+                    </div>
+                  );
+                } catch (err) {
+                  console.error("Test ma'lumotlarini ko'rsatishda xatolik:", err);
+                  return (
+                    <div className="mt-3 ml-8 text-xs text-rose-500 bg-rose-50 dark:bg-rose-950/30 p-3 rounded-xl border border-rose-200 dark:border-rose-800">
+                      Test ma'lumotlarini o'qishda xatolik yuz berdi.
+                    </div>
+                  );
+                }
               })()}
 
               {topic.item_type !== 'quiz' && (

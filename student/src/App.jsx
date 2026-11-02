@@ -9,6 +9,8 @@ import Login from './pages/Login';
 import LessonViewer from './pages/LessonViewer';
 import { ThemeProvider } from './context/ThemeContext';
 
+import ErrorBoundary from './components/ErrorBoundary';
+
 const ProtectedRoute = ({ children, user }) => {
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -41,17 +43,19 @@ function App() {
   };
 
   return (
-    <Routes>
-      <Route path="/login" element={<Login onLogin={handleLogin} />} />
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/login" element={<Login onLogin={handleLogin} />} />
 
-      <Route path="/" element={<ProtectedRoute user={user}><MainLayout onLogout={handleLogout} /></ProtectedRoute>}>
-        <Route index element={<Home />} />
-        <Route path="database" element={<Database />} />
-        <Route path="blocks/:id" element={<LessonViewer />} />
-        <Route path="results" element={<Results />} />
-        <Route path="settings" element={<Settings />} />
-      </Route>
-    </Routes>
+        <Route path="/" element={<ProtectedRoute user={user}><MainLayout onLogout={handleLogout} /></ProtectedRoute>}>
+          <Route index element={<Home />} />
+          <Route path="database" element={<Database />} />
+          <Route path="blocks/:id" element={<LessonViewer />} />
+          <Route path="results" element={<Results />} />
+          <Route path="settings" element={<Settings />} />
+        </Route>
+      </Routes>
+    </ErrorBoundary>
   );
 }
 
