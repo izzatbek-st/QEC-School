@@ -97,7 +97,7 @@ const Home = () => {
               <i className="fa-solid fa-arrow-right text-xs"></i>
             </Link>
             <Link to="/results" className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-medium text-sm transition">
-              <span className="flex items-center space-x-2"><i className="fa-solid fa-trophy"></i><span>Natijalarni kiritish</span></span>
+              <span className="flex items-center space-x-2"><i className="fa-solid fa-trophy"></i><span>Natijalar va testlar tarixi</span></span>
               <i className="fa-solid fa-arrow-right text-xs"></i>
             </Link>
           </div>
