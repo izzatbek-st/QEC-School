@@ -79,6 +79,7 @@ class TopicBase(BaseModel):
     order_index: int = 0
     item_type: Optional[str] = "lesson"
     quiz_data: Optional[str] = None
+    passing_score: Optional[int] = 70
 
 class TopicCreate(TopicBase):
     pass
@@ -86,6 +87,10 @@ class TopicCreate(TopicBase):
 class Topic(TopicBase):
     id: int
     block_id: int
+    completed: Optional[bool] = False
+    is_locked: Optional[bool] = False
+    locked_reason: Optional[str] = None
+    attempt: Optional[Dict[str, Any]] = None
     class Config:
         from_attributes = True
 

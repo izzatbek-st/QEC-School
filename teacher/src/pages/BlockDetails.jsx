@@ -119,6 +119,7 @@ const BlockDetails = () => {
   const handleSaveQuiz = (e) => {
     e.preventDefault();
     const title = e.target.elements.title.value;
+    const passing_score = parseInt(e.target.elements.passing_score?.value || '70', 10);
     
     for (let i = 0; i < quizData.length; i++) {
        const q = quizData[i];
@@ -143,9 +144,10 @@ const BlockDetails = () => {
       title,
       video_url: null,
       content: '', // Question text is now in quiz_data
-      order_index: topics.length,
+      order_index: editingTopic ? editingTopic.order_index : topics.length,
       item_type: 'quiz',
-      quiz_data: JSON.stringify(quizData)
+      quiz_data: JSON.stringify(quizData),
+      passing_score: isNaN(passing_score) ? 70 : passing_score
     };
 
     const url = editingTopic 
@@ -346,10 +348,15 @@ const BlockDetails = () => {
           <div key={topic.id} className={`bg-white dark:bg-gray-800 rounded-2xl shadow-sm border p-5 flex flex-col md:flex-row gap-6 items-start ${topic.item_type === 'quiz' ? 'border-green-100 dark:border-green-900/30' : 'border-gray-100 dark:border-gray-700'}`}>
             <div className="flex-1 w-full">
               <div className="flex justify-between items-start">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2 flex-wrap">
                   <span className="text-indigo-600 min-w-6">{index + 1}.</span>
                   {topic.item_type === 'quiz' ? (
-                    <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-md shrink-0"><i className="fa-solid fa-check-double mr-1"></i>Test</span>
+                    <>
+                      <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-md shrink-0"><i className="fa-solid fa-check-double mr-1"></i>Test</span>
+                      <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-xs px-2.5 py-1 rounded-md shrink-0 font-medium">
+                        <i className="fa-solid fa-bullseye mr-1"></i>O'tish bali: {topic.passing_score ?? 70}%
+                      </span>
+                    </>
                   ) : (
                     <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded-md shrink-0"><i className="fa-solid fa-book-open mr-1"></i>Dars</span>
                   )}
@@ -509,16 +516,41 @@ const BlockDetails = () => {
             </div>
             
             <form onSubmit={handleSaveQuiz} className="flex-1 overflow-y-auto py-4 space-y-6 pr-2 custom-scrollbar">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Test Sarlavhasi <span className="text-red-500">*</span></label>
-                <input 
-                  type="text"
-                  name="title" 
-                  defaultValue={editingTopic?.title || ''} 
-                  placeholder="Masalan: 1-Mavzu yuzasidan test" 
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
-                  required 
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Test Sarlavhasi <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="text"
+                    name="title" 
+                    defaultValue={editingTopic?.title || ''} 
+                    placeholder="Masalan: 1-Mavzu yuzasidan test" 
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    O'tish foizi (%) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      name="passing_score" 
+                      min="1"
+                      max="100"
+                      defaultValue={editingTopic?.passing_score ?? 70} 
+                      placeholder="70" 
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-10" 
+                      required 
+                    />
+                    <span className="absolute right-3.5 top-3.5 text-gray-400 font-bold text-sm">%</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                    Keyingi mavzularni ochish uchun
+                  </p>
+                </div>
               </div>
 
               <QuizBuilder quizData={quizData} setQuizData={setQuizData} />

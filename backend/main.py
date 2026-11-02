@@ -6,8 +6,9 @@ import os
 import secrets
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.responses import RedirectResponse
@@ -15,6 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -218,7 +220,13 @@ def authorize_block(block: models.Block, current_user: dict, db: Session) -> Non
         raise HTTPException(status_code=403, detail="Bu dars blokiga ruxsat yo'q")
 
 
-def student_topic_payload(topic: models.Topic, student_id: int) -> dict:
+def student_topic_payload(
+    topic: models.Topic,
+    student_id: int,
+    db: Session = None,
+    attempt: models.QuizAttempt = None,
+) -> dict:
+    passing_score = topic.passing_score if topic.passing_score is not None else 70
     payload = {
         "id": topic.id,
         "block_id": topic.block_id,
@@ -228,15 +236,47 @@ def student_topic_payload(topic: models.Topic, student_id: int) -> dict:
         "order_index": topic.order_index,
         "item_type": topic.item_type,
         "quiz_data": topic.quiz_data,
+        "passing_score": passing_score,
+        "completed": False,
+        "is_locked": False,
+        "locked_reason": None,
+        "attempt": None,
     }
     if topic.item_type == "quiz":
-        try:
-            questions = parse_quiz_data(topic.quiz_data)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        payload["quiz_data"] = public_quiz_data(
-            questions, SECRET_KEY, student_id, topic.id
-        )
+        if attempt is None and db is not None:
+            attempt = db.query(models.QuizAttempt).filter(
+                models.QuizAttempt.student_id == student_id,
+                models.QuizAttempt.topic_id == topic.id,
+            ).first()
+
+        if attempt is not None:
+            payload["completed"] = True
+            questions = json.loads(attempt.results_data) if attempt.results_data else None
+            answers = json.loads(attempt.answers_data) if attempt.answers_data else {}
+            score_pct = round((attempt.best_score / (attempt.total_questions or 1)) * 100)
+            payload["attempt"] = {
+                "id": attempt.id,
+                "correct": attempt.best_score,
+                "incorrect": max(0, attempt.total_questions - attempt.best_score),
+                "total": attempt.total_questions,
+                "score": attempt.best_score,
+                "best_score": attempt.best_score,
+                "percentage": score_pct,
+                "is_passed": score_pct >= passing_score,
+                "passing_score": passing_score,
+                "attempt_count": attempt.attempt_count,
+                "created_at": (attempt.created_at or attempt.updated_at).isoformat() if (attempt.created_at or attempt.updated_at) else None,
+                "questions": questions,
+                "answers": answers,
+            }
+        else:
+            try:
+                questions = parse_quiz_data(topic.quiz_data)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            payload["quiz_data"] = public_quiz_data(
+                questions, SECRET_KEY, student_id, topic.id
+            )
     return payload
 
 
@@ -308,8 +348,38 @@ def seed_from_template_if_empty(db: Session):
         print("Seed template error:", e)
 
 
+def ensure_quiz_attempts_columns():
+    try:
+        with engine.connect() as conn:
+            if engine.dialect.name == "sqlite":
+                cursor = conn.connection.cursor()
+                cursor.execute("PRAGMA table_info(quiz_attempts)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if "answers_data" not in columns:
+                    cursor.execute("ALTER TABLE quiz_attempts ADD COLUMN answers_data TEXT")
+                if "results_data" not in columns:
+                    cursor.execute("ALTER TABLE quiz_attempts ADD COLUMN results_data TEXT")
+                if "created_at" not in columns:
+                    cursor.execute("ALTER TABLE quiz_attempts ADD COLUMN created_at DATETIME")
+                
+                cursor.execute("PRAGMA table_info(topics)")
+                t_cols = [row[1] for row in cursor.fetchall()]
+                if "passing_score" not in t_cols:
+                    cursor.execute("ALTER TABLE topics ADD COLUMN passing_score INTEGER DEFAULT 70")
+                conn.connection.commit()
+            else:
+                conn.execute(text("ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS answers_data TEXT"))
+                conn.execute(text("ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS results_data TEXT"))
+                conn.execute(text("ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+                conn.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS passing_score INTEGER DEFAULT 70"))
+                conn.commit()
+    except Exception as e:
+        print("ensure_quiz_attempts_columns notice:", e)
+
+
 def init_db(db: Session):
     models.Base.metadata.create_all(bind=engine)
+    ensure_quiz_attempts_columns()
     settings = db.query(models.Settings).first()
     if not settings:
         default_settings = models.Settings(
@@ -694,9 +764,55 @@ def get_topics_for_block(
     topics = db.query(models.Topic).filter(
         models.Topic.block_id == block_id
     ).order_by(models.Topic.order_index).all()
-    if current_user["role"] == "student":
-        return [student_topic_payload(topic, current_user["sub"]) for topic in topics]
-    return topics
+    if current_user["role"] == "teacher":
+        return topics
+
+    student_id = current_user["sub"]
+    topic_ids = [t.id for t in topics]
+    attempts = db.query(models.QuizAttempt).filter(
+        models.QuizAttempt.student_id == student_id,
+        models.QuizAttempt.topic_id.in_(topic_ids)
+    ).all()
+    attempts_by_topic = {a.topic_id: a for a in attempts}
+
+    result = []
+    blocking_quiz = None
+    for t in topics:
+        payload = student_topic_payload(t, student_id, db, attempts_by_topic.get(t.id))
+        if blocking_quiz is not None:
+            payload["is_locked"] = True
+            req_pct = blocking_quiz.passing_score if blocking_quiz.passing_score is not None else 70
+            att = attempts_by_topic.get(blocking_quiz.id)
+            if att and att.total_questions > 0:
+                user_pct = round((att.best_score / att.total_questions) * 100)
+                payload["locked_reason"] = (
+                    f"Ushbu mavzuga o'tish uchun avval «{blocking_quiz.title}» testidan "
+                    f"kamida {req_pct}% to'plashingiz kerak (Sizning natijangiz: {user_pct}%)."
+                )
+            else:
+                payload["locked_reason"] = (
+                    f"Ushbu mavzuga o'tish uchun avval «{blocking_quiz.title}» testini "
+                    f"kamida {req_pct}% natija bilan topshirishingiz shart."
+                )
+        else:
+            payload["is_locked"] = False
+            payload["locked_reason"] = None
+
+        result.append(payload)
+
+        # If this topic is a quiz, check if it was passed
+        if t.item_type == "quiz":
+            req_pct = t.passing_score if t.passing_score is not None else 70
+            att = attempts_by_topic.get(t.id)
+            is_passed = False
+            if att and att.total_questions > 0:
+                user_pct = round((att.best_score / att.total_questions) * 100)
+                if user_pct >= req_pct:
+                    is_passed = True
+            if not is_passed and blocking_quiz is None:
+                blocking_quiz = t
+
+    return result
 
 @app.get("/api/topics/{topic_id}", response_model=schemas.Topic)
 def get_topic(
@@ -708,9 +824,51 @@ def get_topic(
     if not db_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     authorize_block(db_topic.block, current_user, db)
-    if current_user["role"] == "student":
-        return student_topic_payload(db_topic, current_user["sub"])
-    return db_topic
+    if current_user["role"] == "teacher":
+        return db_topic
+
+    topics_in_block = db.query(models.Topic).filter(
+        models.Topic.block_id == db_topic.block_id
+    ).order_by(models.Topic.order_index).all()
+    student_id = current_user["sub"]
+    attempts = db.query(models.QuizAttempt).filter(
+        models.QuizAttempt.student_id == student_id,
+        models.QuizAttempt.topic_id.in_([t.id for t in topics_in_block])
+    ).all()
+    attempts_by_topic = {a.topic_id: a for a in attempts}
+
+    blocking_quiz = None
+    for t in topics_in_block:
+        if t.id == db_topic.id:
+            payload = student_topic_payload(db_topic, student_id, db, attempts_by_topic.get(db_topic.id))
+            if blocking_quiz is not None:
+                req_pct = blocking_quiz.passing_score if blocking_quiz.passing_score is not None else 70
+                att = attempts_by_topic.get(blocking_quiz.id)
+                if att and att.total_questions > 0:
+                    user_pct = round((att.best_score / att.total_questions) * 100)
+                    msg = f"Ushbu mavzuga o'tish uchun avval «{blocking_quiz.title}» testidan kamida {req_pct}% to'plashingiz kerak (Sizning natijangiz: {user_pct}%)."
+                else:
+                    msg = f"Ushbu mavzuga o'tish uchun avval «{blocking_quiz.title}» testini kamida {req_pct}% natija bilan topshirishingiz shart."
+                payload["is_locked"] = True
+                payload["locked_reason"] = msg
+                raise HTTPException(status_code=403, detail=msg)
+            else:
+                payload["is_locked"] = False
+                payload["locked_reason"] = None
+                return payload
+
+        if t.item_type == "quiz":
+            req_pct = t.passing_score if t.passing_score is not None else 70
+            att = attempts_by_topic.get(t.id)
+            is_passed = False
+            if att and att.total_questions > 0:
+                user_pct = round((att.best_score / att.total_questions) * 100)
+                if user_pct >= req_pct:
+                    is_passed = True
+            if not is_passed and blocking_quiz is None:
+                blocking_quiz = t
+
+    return student_topic_payload(db_topic, student_id, db, attempts_by_topic.get(db_topic.id))
 
 
 @app.post("/api/student/topics/{topic_id}/attempts")
@@ -734,6 +892,22 @@ def submit_quiz_attempt(
         raise HTTPException(status_code=400, detail="Bu mavzuda topshiriladigan test yo'q")
     authorize_block(topic.block, current_user, db)
 
+    student = db.query(models.Student).filter(
+        models.Student.id == current_user["sub"]
+    ).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    existing_attempt = db.query(models.QuizAttempt).filter(
+        models.QuizAttempt.student_id == student.id,
+        models.QuizAttempt.topic_id == topic.id,
+    ).first()
+    if existing_attempt is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Ushbu test allaqachon topshirilgan. Testni qayta ishlash imkoni mavjud emas.",
+        )
+
     try:
         questions = parse_quiz_data(topic.quiz_data)
         question_ids = {str(question["id"]) for question in questions}
@@ -749,53 +923,213 @@ def submit_quiz_attempt(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    student = db.query(models.Student).filter(
-        models.Student.id == current_user["sub"]
-    ).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-
-    attempt = db.query(models.QuizAttempt).filter(
-        models.QuizAttempt.student_id == student.id,
-        models.QuizAttempt.topic_id == topic.id,
-    ).first()
-    if attempt is None:
-        attempt = models.QuizAttempt(
-            student_id=student.id,
-            topic_id=topic.id,
-            best_score=correct_count,
-            last_score=correct_count,
-            total_questions=len(questions),
-            attempt_count=1,
-        )
-        student.score += correct_count
-        db.add(attempt)
-    else:
-        previous_best = attempt.best_score
-        if attempt.total_questions != len(questions):
-            attempt.best_score = correct_count
-            student.score += correct_count - previous_best
-        elif correct_count > previous_best:
-            attempt.best_score = correct_count
-            student.score += correct_count - previous_best
-        attempt.last_score = correct_count
-        attempt.total_questions = len(questions)
-        attempt.attempt_count += 1
+    incorrect_count = max(0, len(questions) - correct_count)
+    now = datetime.utcnow()
+    attempt = models.QuizAttempt(
+        student_id=student.id,
+        topic_id=topic.id,
+        best_score=correct_count,
+        last_score=correct_count,
+        total_questions=len(questions),
+        attempt_count=1,
+        answers_data=json.dumps(submission.answers, ensure_ascii=False),
+        results_data=json.dumps(result_questions, ensure_ascii=False),
+        created_at=now,
+    )
+    student.score += correct_count
+    db.add(attempt)
 
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Natija parallel ravishda saqlandi; sahifani yangilang") from exc
+        raise HTTPException(status_code=409, detail="Ushbu test allaqachon topshirilgan.") from exc
 
     db.refresh(attempt)
+    passing_score = topic.passing_score if topic.passing_score is not None else 70
+    percentage = round((correct_count / (len(questions) or 1)) * 100)
+    is_passed = percentage >= passing_score
+
     return {
+        "id": attempt.id,
         "correct": correct_count,
+        "incorrect": incorrect_count,
         "total": len(questions),
-        "best_score": attempt.best_score,
-        "attempt_count": attempt.attempt_count,
+        "score": correct_count,
+        "best_score": correct_count,
+        "percentage": percentage,
+        "passing_score": passing_score,
+        "is_passed": is_passed,
+        "attempt_count": 1,
         "questions": result_questions,
+        "answers": submission.answers,
+        "created_at": (attempt.created_at or now).isoformat(),
     }
+
+
+@app.get("/api/student/my-attempts")
+def get_student_attempts(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Faqat o'quvchilar uchun")
+    student_id = current_user["sub"]
+    attempts = (
+        db.query(models.QuizAttempt)
+        .filter(models.QuizAttempt.student_id == student_id)
+        .order_by(models.QuizAttempt.updated_at.desc())
+        .all()
+    )
+    result = []
+    for att in attempts:
+        topic = att.topic
+        block = topic.block if topic else None
+        result.append({
+            "id": att.id,
+            "topic_id": att.topic_id,
+            "topic_title": topic.title if topic else "Test",
+            "block_id": block.id if block else None,
+            "block_title": block.title if block else "—",
+            "correct": att.best_score,
+            "incorrect": max(0, att.total_questions - att.best_score),
+            "total": att.total_questions,
+            "score": att.best_score,
+            "percentage": round((att.best_score / (att.total_questions or 1)) * 100),
+            "created_at": (att.created_at or att.updated_at).isoformat() if (att.created_at or att.updated_at) else None,
+        })
+    return result
+
+
+@app.get("/api/student/my-attempts/{attempt_id}")
+def get_student_attempt_detail(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Faqat o'quvchilar uchun")
+    att = db.query(models.QuizAttempt).filter(
+        models.QuizAttempt.id == attempt_id,
+        models.QuizAttempt.student_id == current_user["sub"],
+    ).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Test natijasi topilmadi")
+    topic = att.topic
+    block = topic.block if topic else None
+    questions = json.loads(att.results_data) if att.results_data else []
+    answers = json.loads(att.answers_data) if att.answers_data else {}
+    return {
+        "id": att.id,
+        "topic_id": att.topic_id,
+        "topic_title": topic.title if topic else "Test",
+        "block_id": block.id if block else None,
+        "block_title": block.title if block else "—",
+        "correct": att.best_score,
+        "incorrect": max(0, att.total_questions - att.best_score),
+        "total": att.total_questions,
+        "score": att.best_score,
+        "percentage": round((att.best_score / (att.total_questions or 1)) * 100),
+        "created_at": (att.created_at or att.updated_at).isoformat() if (att.created_at or att.updated_at) else None,
+        "questions": questions,
+        "answers": answers,
+    }
+
+
+@app.get("/api/teacher/attempts", dependencies=[Depends(require_teacher)])
+def get_teacher_attempts(
+    student_id: Optional[int] = None,
+    group_id: Optional[int] = None,
+    topic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.QuizAttempt).join(models.Student, models.QuizAttempt.student_id == models.Student.id)
+    if student_id:
+        query = query.filter(models.QuizAttempt.student_id == student_id)
+    if group_id:
+        query = query.filter(models.Student.group_id == group_id)
+    if topic_id:
+        query = query.filter(models.QuizAttempt.topic_id == topic_id)
+
+    attempts = query.order_by(models.QuizAttempt.updated_at.desc()).all()
+    results = []
+    for att in attempts:
+        student = att.student
+        group = student.group if student else None
+        topic = att.topic
+        block = topic.block if topic else None
+        results.append({
+            "id": att.id,
+            "student_id": student.id if student else None,
+            "student_name": student.name if student else "Noma'lum",
+            "student_initials": student.initials if student else "",
+            "student_color": student.color if student else "bg-indigo-100 text-indigo-600",
+            "group_id": group.id if group else None,
+            "group_name": group.name if group else "Noma'lum",
+            "topic_id": att.topic_id,
+            "topic_title": topic.title if topic else "Test",
+            "block_id": block.id if block else None,
+            "block_title": block.title if block else "—",
+            "correct": att.best_score,
+            "incorrect": max(0, att.total_questions - att.best_score),
+            "total": att.total_questions,
+            "score": att.best_score,
+            "percentage": round((att.best_score / (att.total_questions or 1)) * 100),
+            "created_at": (att.created_at or att.updated_at).isoformat() if (att.created_at or att.updated_at) else None,
+        })
+    return results
+
+
+@app.get("/api/teacher/attempts/{attempt_id}", dependencies=[Depends(require_teacher)])
+def get_teacher_attempt_detail(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+):
+    att = db.query(models.QuizAttempt).filter(models.QuizAttempt.id == attempt_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Test natijasi topilmadi")
+    student = att.student
+    group = student.group if student else None
+    topic = att.topic
+    block = topic.block if topic else None
+    questions = json.loads(att.results_data) if att.results_data else []
+    answers = json.loads(att.answers_data) if att.answers_data else {}
+    return {
+        "id": att.id,
+        "student_id": student.id if student else None,
+        "student_name": student.name if student else "Noma'lum",
+        "student_initials": student.initials if student else "",
+        "student_color": student.color if student else "bg-indigo-100 text-indigo-600",
+        "group_name": group.name if group else "Noma'lum",
+        "topic_id": att.topic_id,
+        "topic_title": topic.title if topic else "Test",
+        "block_title": block.title if block else "—",
+        "correct": att.best_score,
+        "incorrect": max(0, att.total_questions - att.best_score),
+        "total": att.total_questions,
+        "score": att.best_score,
+        "percentage": round((att.best_score / (att.total_questions or 1)) * 100),
+        "created_at": (att.created_at or att.updated_at).isoformat() if (att.created_at or att.updated_at) else None,
+        "questions": questions,
+        "answers": answers,
+    }
+
+
+@app.delete("/api/teacher/attempts/{attempt_id}", dependencies=[Depends(require_teacher)])
+def delete_teacher_attempt(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+):
+    att = db.query(models.QuizAttempt).filter(models.QuizAttempt.id == attempt_id).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Test natijasi topilmadi")
+    student = att.student
+    if student:
+        student.score = max(0, student.score - att.best_score)
+    db.delete(att)
+    db.commit()
+    return {"message": "Test natijasi o'chirildi. O'quvchi testni qayta topshirishi mumkin."}
+
 
 @app.post("/api/teacher/blocks/{block_id}/topics", response_model=schemas.Topic, dependencies=[Depends(require_teacher)])
 def create_topic(block_id: int, topic: schemas.TopicCreate, db: Session = Depends(get_db)):

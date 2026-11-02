@@ -45,6 +45,7 @@ class Topic(Base):
     
     item_type = Column(String, default="lesson")
     quiz_data = Column(String, nullable=True)
+    passing_score = Column(Integer, default=70)
 
     block = relationship("Block", back_populates="topics_list")
 
@@ -84,4 +85,10 @@ class QuizAttempt(Base):
     last_score = Column(Integer, nullable=False, default=0)
     total_questions = Column(Integer, nullable=False, default=0)
     attempt_count = Column(Integer, nullable=False, default=0)
+    answers_data = Column(String, nullable=True)
+    results_data = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    student = relationship("Student", backref="quiz_attempts")
+    topic = relationship("Topic", backref="quiz_attempts")

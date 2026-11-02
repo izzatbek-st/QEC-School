@@ -327,12 +327,87 @@ def grade_quiz(
         correct_count += int(is_correct)
         result_question = copy.deepcopy(question)
         result_question["is_correct"] = is_correct
-        if question["type"] == "matching":
-            for pair in result_question.get("pairs", []):
-                pair["correctRightId"] = str(pair.get("right_id", pair["id"]))
+        result_question["student_answer"] = answer
+
+        question_type = question.get("type")
+        if question_type in {"single_choice", "multiple_choice"}:
+            selected_ids = set()
+            if isinstance(answer, dict):
+                selected_ids = {str(k) for k, v in answer.items() if v}
+            elif answer is not None:
+                selected_ids = {str(answer)}
+            for opt in result_question.get("options", []):
+                opt["isSelected"] = str(opt.get("id")) in selected_ids
+
+        elif question_type == "sequence":
+            items_by_id = {str(i.get("id")): i for i in question.get("items", [])}
+            student_order = [str(i) for i in answer] if isinstance(answer, list) else []
+            result_question["student_items"] = [
+                items_by_id[i_id] for i_id in student_order if i_id in items_by_id
+            ]
+
+        elif question_type == "matching":
+            pairs = question.get("pairs", [])
+            token_to_right = {}
+            id_to_right = {}
+            for pair in pairs:
+                rid = str(pair.get("right_id", pair["id"]))
+                rtext = pair.get("right", "")
+                id_to_right[rid] = rtext
+                token = _matching_token(secret, student_id, topic_id, question.get("id"), rid)
+                token_to_right[token] = rtext
+                token_idx = _matching_token(secret, student_id, topic_id, index, rid)
+                token_to_right[token_idx] = rtext
+
+            pairs_detail = []
+            for pair in pairs:
+                rid = str(pair.get("right_id", pair["id"]))
+                expected_token = _matching_token(secret, student_id, topic_id, question.get("id"), rid)
+                expected_token_idx = _matching_token(secret, student_id, topic_id, index, rid)
+                chosen_val = str(answer.get(str(pair["id"]), answer.get(pair["id"], ""))) if isinstance(answer, dict) else ""
+                is_pair_correct = (chosen_val == expected_token or chosen_val == expected_token_idx or chosen_val == rid)
+                student_right_text = token_to_right.get(chosen_val, id_to_right.get(chosen_val, chosen_val))
+
+                pairs_detail.append({
+                    "id": pair["id"],
+                    "left": pair.get("left", ""),
+                    "correctRightId": rid,
+                    "correctRightText": pair.get("right", ""),
+                    "studentSelectedText": student_right_text,
+                    "isCorrect": is_pair_correct,
+                })
+            result_question["pairs"] = pairs_detail
             result_question["rightOptions"] = [
                 {"id": str(pair.get("right_id", pair["id"])), "text": pair.get("right", "")}
-                for pair in question.get("pairs", [])
+                for pair in pairs
             ]
+
+        elif question_type in {"fill_blanks", "drag_words"}:
+            text = question.get("text") or ""
+            answers_expected = re.findall(r"\[(.*?)\]", text)
+            parts = re.split(r"\[(.*?)\]", text)
+            blank_indexes = [str(idx) for idx in range(1, len(parts), 2)]
+            ans_dict = answer if isinstance(answer, dict) else {}
+            student_filled = [ans_dict.get(b_idx, "") for b_idx in blank_indexes]
+            result_question["correct_blanks"] = answers_expected
+            result_question["student_blanks"] = student_filled
+
+        elif question_type == "dropdown":
+            fields_detail = []
+            ans_dict = answer if isinstance(answer, dict) else {}
+            for field in question.get("fields", []):
+                fid = str(field.get("id"))
+                correct_val = str(field.get("correct", field.get("correct_answer", "")))
+                student_val = str(ans_dict.get(fid, ans_dict.get(field.get("id"), "")))
+                fields_detail.append({
+                    "id": field.get("id"),
+                    "label": field.get("label", ""),
+                    "options": field.get("options", ""),
+                    "correct": correct_val,
+                    "student_value": student_val,
+                    "is_correct": _normalise_text(student_val) == _normalise_text(correct_val)
+                })
+            result_question["fields"] = fields_detail
+
         results.append(result_question)
     return correct_count, results
