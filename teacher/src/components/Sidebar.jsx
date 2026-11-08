@@ -65,6 +65,14 @@ const Sidebar = ({ isOpen, closeSidebar, onLogout }) => {
             <span>Guruhlarim</span>
           </NavLink>
           <NavLink 
+            to="/students" 
+            onClick={closeSidebar}
+            className={({isActive}) => isActive ? "w-full flex items-center space-x-3 py-3 px-4 rounded-xl bg-indigo-800 dark:bg-gray-800 text-white font-medium transition duration-150" : "w-full flex items-center space-x-3 py-3 px-4 rounded-xl text-indigo-200 hover:bg-indigo-800/50 hover:text-white font-medium transition duration-150"}
+          >
+            <i className="fa-solid fa-graduation-cap w-5"></i>
+            <span>O'quvchilarim</span>
+          </NavLink>
+          <NavLink 
             to="/results" 
             onClick={closeSidebar}
             className={({isActive}) => isActive ? "w-full flex items-center space-x-3 py-3 px-4 rounded-xl bg-indigo-800 dark:bg-gray-800 text-white font-medium transition duration-150" : "w-full flex items-center space-x-3 py-3 px-4 rounded-xl text-indigo-200 hover:bg-indigo-800/50 hover:text-white font-medium transition duration-150"}

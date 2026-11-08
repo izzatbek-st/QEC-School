@@ -738,6 +738,50 @@ def delete_group(group_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Group deleted successfully"}
 
+@app.get("/api/teacher/students", response_model=List[schemas.StudentDetail], dependencies=[Depends(require_teacher)])
+def get_all_students(db: Session = Depends(get_db)):
+    students = db.query(models.Student).order_by(models.Student.id.desc()).all()
+    result = []
+    for s in students:
+        result.append({
+            "id": s.id,
+            "name": s.name,
+            "initials": s.initials,
+            "username": s.username,
+            "color": s.color,
+            "score": s.score,
+            "group_id": s.group_id,
+            "group_name": s.group.name if s.group else "Guruhsiz"
+        })
+    return result
+
+@app.post("/api/teacher/students", response_model=schemas.StudentDetail, dependencies=[Depends(require_teacher)])
+def create_student_global(student: schemas.StudentCreateWithGroup, db: Session = Depends(get_db)):
+    group = db.query(models.Group).filter(models.Group.id == student.group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Guruh topilmadi")
+    
+    existing = db.query(models.Student).filter(models.Student.username == student.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Ushbu login allaqachon band")
+        
+    student_data = student.model_dump()
+    student_data["password"] = hash_password(student_data["password"])
+    db_student = models.Student(**student_data)
+    db.add(db_student)
+    db.commit()
+    db.refresh(db_student)
+    return {
+        "id": db_student.id,
+        "name": db_student.name,
+        "initials": db_student.initials,
+        "username": db_student.username,
+        "color": db_student.color,
+        "score": db_student.score,
+        "group_id": db_student.group_id,
+        "group_name": group.name
+    }
+
 @app.post("/api/teacher/groups/{group_id}/students", response_model=schemas.Student, dependencies=[Depends(require_teacher)])
 def create_student_in_group(group_id: int, student: schemas.StudentCreate, db: Session = Depends(get_db)):
     db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
@@ -757,22 +801,45 @@ def create_student_in_group(group_id: int, student: schemas.StudentCreate, db: S
     db.refresh(db_student)
     return db_student
 
-@app.put("/api/teacher/students/{student_id}", response_model=schemas.Student, dependencies=[Depends(require_teacher)])
+@app.put("/api/teacher/students/{student_id}", response_model=schemas.StudentDetail, dependencies=[Depends(require_teacher)])
 def update_student_credentials(student_id: int, update_data: schemas.StudentUpdate, db: Session = Depends(get_db)):
     db_student = db.query(models.Student).filter(models.Student.id == student_id).first()
     if not db_student:
         raise HTTPException(status_code=404, detail="Student not found")
     
-    if update_data.username != db_student.username:
+    if update_data.username and update_data.username != db_student.username:
         existing = db.query(models.Student).filter(models.Student.username == update_data.username).first()
         if existing:
             raise HTTPException(status_code=400, detail="Ushbu login band")
+        db_student.username = update_data.username
 
-    db_student.username = update_data.username
-    db_student.password = hash_password(update_data.password)
+    if update_data.name:
+        db_student.name = update_data.name
+        db_student.initials = "".join([part[0] for part in update_data.name.split() if part])[:2].upper() or "ST"
+
+    if update_data.password and update_data.password.strip():
+        if len(update_data.password) < 8:
+            raise HTTPException(status_code=400, detail="Parol kamida 8 ta belgidan iborat bo'lishi kerak")
+        db_student.password = hash_password(update_data.password)
+
+    if update_data.group_id is not None and update_data.group_id != db_student.group_id:
+        group = db.query(models.Group).filter(models.Group.id == update_data.group_id).first()
+        if not group:
+            raise HTTPException(status_code=404, detail="Tanlangan guruh topilmadi")
+        db_student.group_id = update_data.group_id
+
     db.commit()
     db.refresh(db_student)
-    return db_student
+    return {
+        "id": db_student.id,
+        "name": db_student.name,
+        "initials": db_student.initials,
+        "username": db_student.username,
+        "color": db_student.color,
+        "score": db_student.score,
+        "group_id": db_student.group_id,
+        "group_name": db_student.group.name if db_student.group else "Guruhsiz"
+    }
 
 @app.delete("/api/teacher/students/{student_id}", dependencies=[Depends(require_teacher)])
 def delete_student(student_id: int, db: Session = Depends(get_db)):

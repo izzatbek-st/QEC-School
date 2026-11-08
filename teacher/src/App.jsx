@@ -4,6 +4,7 @@ import MainLayout from './layouts/MainLayout';
 import Home from './pages/Home';
 import Database from './pages/Database';
 import Groups from './pages/Groups';
+import Students from './pages/Students';
 import Results from './pages/Results';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -63,6 +64,7 @@ function App() {
           <Route path="database" element={<Database />} />
           <Route path="database/blocks/:id" element={<BlockDetails />} />
           <Route path="groups" element={<Groups />} />
+          <Route path="students" element={<Students />} />
           <Route path="results" element={<Results />} />
           <Route path="settings" element={<Settings />} />
         </Route>

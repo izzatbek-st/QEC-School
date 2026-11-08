@@ -39,13 +39,26 @@ class StudentBase(BaseModel):
 class StudentCreate(StudentBase):
     password: str = Field(min_length=8, max_length=128)
 
-class StudentUpdate(BaseModel):
-    username: str
+class StudentCreateWithGroup(StudentBase):
     password: str = Field(min_length=8, max_length=128)
+    group_id: int
+
+class StudentUpdate(BaseModel):
+    name: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    group_id: Optional[int] = None
 
 class Student(StudentBase):
     id: int
     group_id: int
+    class Config:
+        from_attributes = True
+
+class StudentDetail(StudentBase):
+    id: int
+    group_id: int
+    group_name: Optional[str] = None
     class Config:
         from_attributes = True
 
