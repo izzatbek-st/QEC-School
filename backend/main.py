@@ -26,17 +26,21 @@ from quizzes import grade_quiz, parse_quiz_data, public_quiz_data
 
 production = os.getenv("APP_ENV", "development").lower() == "production"
 secret_key = os.getenv("APP_SECRET_KEY")
-if production and not secret_key:
-    import logging
-    logging.warning(
-        "WARNING: APP_SECRET_KEY is not set in production. Generated a temporary key. "
-        "Set APP_SECRET_KEY in Render environment variables to preserve login sessions across restarts."
-    )
-    secret_key = secrets.token_urlsafe(48)
-elif secret_key and len(secret_key) < 32:
+if not secret_key:
+    if production:
+        import logging
+        logging.warning(
+            "WARNING: APP_SECRET_KEY is not set in production. Generated a temporary key. "
+            "Set APP_SECRET_KEY in Render environment variables to preserve login sessions across restarts."
+        )
+        secret_key = secrets.token_urlsafe(48)
+    else:
+        # Stable secret key for local development to prevent session loss on restart/reload
+        secret_key = "edumaster_secure_local_dev_secret_key_fixed_2026_qec"
+elif len(secret_key) < 32:
     raise RuntimeError("APP_SECRET_KEY must contain at least 32 characters")
 
-SECRET_KEY = (secret_key or secrets.token_urlsafe(48)).encode("utf-8")
+SECRET_KEY = secret_key.encode("utf-8")
 INITIAL_ADMIN_PASSWORD = os.getenv("INITIAL_ADMIN_PASSWORD")
 if production and INITIAL_ADMIN_PASSWORD and len(INITIAL_ADMIN_PASSWORD) < 12:
     import logging
@@ -637,11 +641,60 @@ def create_block(block: schemas.BlockCreate, db: Session = Depends(get_db)):
     db.refresh(db_block)
     return db_block
 
+@app.get("/api/teacher/blocks/{block_id}", response_model=schemas.Block, dependencies=[Depends(require_teacher)])
+def get_block_by_id(block_id: int, db: Session = Depends(get_db)):
+    db_block = db.query(models.Block).filter(models.Block.id == block_id).first()
+    if not db_block:
+        raise HTTPException(status_code=404, detail="Block not found")
+    return db_block
+
+@app.put("/api/teacher/blocks/{block_id}", response_model=schemas.Block, dependencies=[Depends(require_teacher)])
+def update_block(block_id: int, block_data: schemas.BlockUpdate, db: Session = Depends(get_db)):
+    db_block = db.query(models.Block).filter(models.Block.id == block_id).first()
+    if not db_block:
+        raise HTTPException(status_code=404, detail="Block not found")
+    
+    if block_data.title is not None:
+        db_block.title = block_data.title
+    if block_data.category is not None:
+        db_block.category = block_data.category
+        if block_data.badge is None:
+            db_block.badge = block_data.category
+    if block_data.desc is not None:
+        db_block.desc = block_data.desc
+    if block_data.badge is not None:
+        db_block.badge = block_data.badge
+    if block_data.badge_class is not None:
+        db_block.badge_class = block_data.badge_class
+        
+    if block_data.group_ids is not None:
+        groups = db.query(models.Group).filter(models.Group.id.in_(block_data.group_ids)).all()
+        db_block.groups = groups
+
+    db.commit()
+    db.refresh(db_block)
+    return db_block
+
+@app.put("/api/teacher/blocks/{block_id}/reorder", dependencies=[Depends(require_teacher)])
+def reorder_block_topics(block_id: int, reorder_data: schemas.BlockTopicsReorder, db: Session = Depends(get_db)):
+    for item in reorder_data.topics:
+        db.query(models.Topic).filter(
+            models.Topic.id == item.id,
+            models.Topic.block_id == block_id
+        ).update({"order_index": item.order_index})
+    db.commit()
+    return {"message": "Topics reordered successfully"}
+
 @app.delete("/api/teacher/blocks/{block_id}", dependencies=[Depends(require_teacher)])
 def delete_block(block_id: int, db: Session = Depends(get_db)):
     db_block = db.query(models.Block).filter(models.Block.id == block_id).first()
     if not db_block:
         raise HTTPException(status_code=404, detail="Block not found")
+    topic_ids = [t.id for t in db_block.topics_list]
+    if topic_ids:
+        db.query(models.QuizAttempt).filter(models.QuizAttempt.topic_id.in_(topic_ids)).delete(synchronize_session=False)
+        db.query(models.LessonCompletion).filter(models.LessonCompletion.topic_id.in_(topic_ids)).delete(synchronize_session=False)
+        db.query(models.Topic).filter(models.Topic.id.in_(topic_ids)).delete(synchronize_session=False)
     db.delete(db_block)
     db.commit()
     return {"message": "Block deleted successfully"}
@@ -657,6 +710,33 @@ def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_group)
     return db_group
+
+@app.put("/api/teacher/groups/{group_id}", response_model=schemas.Group, dependencies=[Depends(require_teacher)])
+def update_group(group_id: int, group_data: schemas.GroupUpdate, db: Session = Depends(get_db)):
+    db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
+    if not db_group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if group_data.name is not None:
+        db_group.name = group_data.name
+    if group_data.desc is not None:
+        db_group.desc = group_data.desc
+    db.commit()
+    db.refresh(db_group)
+    return db_group
+
+@app.delete("/api/teacher/groups/{group_id}", dependencies=[Depends(require_teacher)])
+def delete_group(group_id: int, db: Session = Depends(get_db)):
+    db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
+    if not db_group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    student_ids = [s.id for s in db_group.students]
+    if student_ids:
+        db.query(models.QuizAttempt).filter(models.QuizAttempt.student_id.in_(student_ids)).delete(synchronize_session=False)
+        db.query(models.LessonCompletion).filter(models.LessonCompletion.student_id.in_(student_ids)).delete(synchronize_session=False)
+        db.query(models.Student).filter(models.Student.id.in_(student_ids)).delete(synchronize_session=False)
+    db.delete(db_group)
+    db.commit()
+    return {"message": "Group deleted successfully"}
 
 @app.post("/api/teacher/groups/{group_id}/students", response_model=schemas.Student, dependencies=[Depends(require_teacher)])
 def create_student_in_group(group_id: int, student: schemas.StudentCreate, db: Session = Depends(get_db)):
@@ -693,6 +773,18 @@ def update_student_credentials(student_id: int, update_data: schemas.StudentUpda
     db.commit()
     db.refresh(db_student)
     return db_student
+
+@app.delete("/api/teacher/students/{student_id}", dependencies=[Depends(require_teacher)])
+def delete_student(student_id: int, db: Session = Depends(get_db)):
+    db_student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not db_student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    # Clean up student quiz attempts, answers, lesson completions
+    db.query(models.QuizAttempt).filter(models.QuizAttempt.student_id == student_id).delete()
+    db.query(models.LessonCompletion).filter(models.LessonCompletion.student_id == student_id).delete()
+    db.delete(db_student)
+    db.commit()
+    return {"message": "Student deleted successfully"}
 
 @app.get("/api/teacher/results", response_model=List[schemas.Student], dependencies=[Depends(require_teacher)])
 def get_results(db: Session = Depends(get_db)):
@@ -1352,10 +1444,12 @@ def delete_topic(topic_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Topic not found")
         
     block = db_topic.block
+    db.query(models.QuizAttempt).filter(models.QuizAttempt.topic_id == topic_id).delete(synchronize_session=False)
+    db.query(models.LessonCompletion).filter(models.LessonCompletion.topic_id == topic_id).delete(synchronize_session=False)
     db.delete(db_topic)
     
     if block:
-        block.topics = max(0, db.query(models.Topic).filter(models.Topic.block_id == block.id).count() - 1)
+        block.topics = max(0, db.query(models.Topic).filter(models.Topic.block_id == block.id).count())
         
     db.commit()
     return {"message": "Topic deleted"}

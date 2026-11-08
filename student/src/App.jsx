@@ -7,7 +7,6 @@ import Results from './pages/Results';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import LessonViewer from './pages/LessonViewer';
-import { ThemeProvider } from './context/ThemeContext';
 
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -19,17 +18,28 @@ const ProtectedRoute = ({ children, user }) => {
 };
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('student_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      localStorage.removeItem('student_user');
+      return null;
+    }
+  });
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('student_user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        localStorage.removeItem('student_user');
+    const handleStorageChange = (e) => {
+      if (e.key === 'student_user') {
+        try {
+          setUser(e.newValue ? JSON.parse(e.newValue) : null);
+        } catch {
+          setUser(null);
+        }
       }
-    }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const handleLogin = (userData) => {
@@ -45,7 +55,7 @@ function App() {
   return (
     <ErrorBoundary>
       <Routes>
-        <Route path="/login" element={<Login onLogin={handleLogin} />} />
+        <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} />
 
         <Route path="/" element={<ProtectedRoute user={user}><MainLayout onLogout={handleLogout} /></ProtectedRoute>}>
           <Route index element={<Home />} />

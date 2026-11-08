@@ -57,6 +57,10 @@ class GroupBase(BaseModel):
 class GroupCreate(GroupBase):
     pass
 
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    desc: Optional[str] = None
+
 class Group(GroupBase):
     id: int
     students: List[Student] = []
@@ -84,6 +88,13 @@ class TopicBase(BaseModel):
 class TopicCreate(TopicBase):
     pass
 
+class TopicReorderItem(BaseModel):
+    id: int
+    order_index: int
+
+class BlockTopicsReorder(BaseModel):
+    topics: List[TopicReorderItem]
+
 class Topic(TopicBase):
     id: int
     block_id: int
@@ -96,6 +107,14 @@ class Topic(TopicBase):
 
 class BlockCreate(BlockBase):
     group_ids: List[int] = []
+
+class BlockUpdate(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    desc: Optional[str] = None
+    badge: Optional[str] = None
+    badge_class: Optional[str] = None
+    group_ids: Optional[List[int]] = None
 
 class Block(BlockBase):
     id: int

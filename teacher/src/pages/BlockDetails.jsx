@@ -16,13 +16,31 @@ if (BlotFormatter && BlotFormatter.default) {
   Quill.register('modules/blotFormatter', BlotFormatter);
 }
 
+const BADGE_THEMES = [
+  { label: 'Moviy', class: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' },
+  { label: 'Yashil', class: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
+  { label: 'Sariq', class: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300' },
+  { label: 'Binafsha', class: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300' },
+  { label: 'Qizil', class: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300' },
+  { label: 'Moviy-ko\'k', class: 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300' },
+  { label: 'Kulrang', class: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300' },
+];
+
 const BlockDetails = () => {
   const { id } = useParams();
   const [topics, setTopics] = useState([]);
+  const [blockInfo, setBlockInfo] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuizModalOpen, setIsQuizModalOpen] = useState(false);
+  const [isEditBlockModalOpen, setIsEditBlockModalOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState(null);
   const [topicContent, setTopicContent] = useState('');
+  
+  const [availableGroups, setAvailableGroups] = useState([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
+  const [blockFormData, setBlockFormData] = useState({ title: '', category: '', desc: '', badge: '' });
+  const [selectedBadgeClass, setSelectedBadgeClass] = useState(BADGE_THEMES[0].class);
+  const [isSavingBlock, setIsSavingBlock] = useState(false);
   
   // Quiz specific state
   const [quizData, setQuizData] = useState([
@@ -73,9 +91,119 @@ const BlockDetails = () => {
       .catch(console.error);
   };
 
+  const fetchBlockInfo = () => {
+    apiFetch(`${API_URL}/blocks/${id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.id) {
+          setBlockInfo(data);
+          setBlockFormData({
+            title: data.title || '',
+            category: data.category || '',
+            desc: data.desc || '',
+            badge: data.badge || data.category || ''
+          });
+          setSelectedBadgeClass(data.badge_class || BADGE_THEMES[0].class);
+          setSelectedGroupIds((data.groups || []).map(g => g.id));
+        }
+      })
+      .catch(console.error);
+  };
+
+  const fetchGroups = () => {
+    apiFetch(`${API_URL}/groups`)
+      .then(res => res.json())
+      .then(data => setAvailableGroups(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  };
+
   useEffect(() => {
     fetchTopics();
+    fetchBlockInfo();
+    fetchGroups();
   }, [id]);
+
+  const toggleGroupSelection = (gId) => {
+    setSelectedGroupIds(prev => 
+      prev.includes(gId) ? prev.filter(x => x !== gId) : [...prev, gId]
+    );
+  };
+
+  const handleSelectAllGroups = () => {
+    if (selectedGroupIds.length === availableGroups.length) {
+      setSelectedGroupIds([]);
+    } else {
+      setSelectedGroupIds(availableGroups.map(g => g.id));
+    }
+  };
+
+  const handleSaveBlock = async (e) => {
+    e.preventDefault();
+    if (!blockFormData.title.trim()) {
+      alert("Blok sarlavhasini kiriting!");
+      return;
+    }
+
+    setIsSavingBlock(true);
+    const category = blockFormData.category.trim() || 'Umumiy';
+    const badge = blockFormData.badge.trim() || category;
+
+    const payload = {
+      title: blockFormData.title.trim(),
+      category: category,
+      desc: blockFormData.desc.trim(),
+      badge: badge,
+      badge_class: selectedBadgeClass,
+      group_ids: selectedGroupIds
+    };
+
+    try {
+      const res = await apiFetch(`${API_URL}/blocks/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail ? (typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail)) : 'Server xatoligi');
+      }
+
+      const updated = await res.json();
+      setBlockInfo(updated);
+      setIsEditBlockModalOpen(false);
+      alert("Blok ma'lumotlari muvaffaqiyatli yangilandi!");
+    } catch (err) {
+      console.error(err);
+      alert("Blokni yangilashda xatolik: " + err.message);
+    } finally {
+      setIsSavingBlock(false);
+    }
+  };
+
+  const handleMoveTopic = async (index, direction) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= topics.length) return;
+
+    const newTopics = [...topics];
+    const temp = newTopics[index];
+    newTopics[index] = newTopics[targetIndex];
+    newTopics[targetIndex] = temp;
+    setTopics(newTopics);
+
+    try {
+      await apiFetch(`${API_URL}/blocks/${id}/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topics: newTopics.map((t, idx) => ({ id: t.id, order_index: idx }))
+        })
+      });
+    } catch (err) {
+      console.error("Tartibni saqlashda xatolik:", err);
+      fetchTopics();
+    }
+  };
 
   const handleDelete = (topicId) => {
     if (!window.confirm("Rostdan ham buni o'chirmoqchimisiz?")) return;
@@ -337,13 +465,53 @@ const BlockDetails = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center space-x-4">
-        <Link to="/database" className="w-10 h-10 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 hover:text-indigo-600 shadow-sm border border-gray-100 dark:border-gray-700 transition">
-          <i className="fa-solid fa-arrow-left"></i>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Blok Tarkibi</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Blok ichidagi dars va testlarni boshqarish.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="flex items-start space-x-4">
+          <Link to="/database" className="w-10 h-10 bg-gray-50 dark:bg-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl flex items-center justify-center text-gray-500 hover:text-indigo-600 shadow-sm border border-gray-100 dark:border-gray-700 transition shrink-0 mt-0.5">
+            <i className="fa-solid fa-arrow-left"></i>
+          </Link>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{blockInfo?.title || 'Blok Tarkibi'}</h1>
+              {blockInfo?.badge && (
+                <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-lg uppercase ${blockInfo.badge_class || 'bg-indigo-100 text-indigo-700'}`}>
+                  {blockInfo.badge}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{blockInfo?.desc || "Blok ichidagi dars va testlarni boshqarish."}</p>
+            {blockInfo?.groups && blockInfo.groups.length > 0 && (
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-xs text-gray-400">Ruxsat etilgan guruhlar:</span>
+                {blockInfo.groups.map(g => (
+                  <span key={g.id} className="text-[11px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 px-2 py-0.5 rounded-md font-medium">
+                    {g.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center space-x-2 self-start md:self-center shrink-0">
+          <button 
+            onClick={() => {
+              if (blockInfo) {
+                setBlockFormData({
+                  title: blockInfo.title || '',
+                  category: blockInfo.category || '',
+                  desc: blockInfo.desc || '',
+                  badge: blockInfo.badge || blockInfo.category || ''
+                });
+                setSelectedBadgeClass(blockInfo.badge_class || BADGE_THEMES[0].class);
+                setSelectedGroupIds((blockInfo.groups || []).map(g => g.id));
+              }
+              setIsEditBlockModalOpen(true);
+            }} 
+            className="bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-4 py-2 rounded-xl text-sm font-semibold shadow-sm transition flex items-center space-x-2"
+          >
+            <i className="fa-solid fa-pen-to-square"></i>
+            <span>Blokni tahrirlash</span>
+          </button>
         </div>
       </div>
 
@@ -382,11 +550,29 @@ const BlockDetails = () => {
                   )}
                   <span className="line-clamp-1">{topic.title}</span>
                 </h3>
-                <div className="flex space-x-2 shrink-0 ml-4">
-                  <button onClick={() => openEditModal(topic)} className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-500 hover:text-indigo-600 flex items-center justify-center transition">
+                <div className="flex items-center space-x-1.5 shrink-0 ml-4">
+                  <button 
+                    type="button"
+                    disabled={index === 0} 
+                    onClick={() => handleMoveTopic(index, -1)} 
+                    className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-500 hover:text-indigo-600 disabled:opacity-25 disabled:hover:text-gray-500 flex items-center justify-center transition"
+                    title="Yuqoriga ko'chirish"
+                  >
+                    <i className="fa-solid fa-arrow-up text-xs"></i>
+                  </button>
+                  <button 
+                    type="button"
+                    disabled={index === topics.length - 1} 
+                    onClick={() => handleMoveTopic(index, 1)} 
+                    className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-500 hover:text-indigo-600 disabled:opacity-25 disabled:hover:text-gray-500 flex items-center justify-center transition"
+                    title="Pastga ko'chirish"
+                  >
+                    <i className="fa-solid fa-arrow-down text-xs"></i>
+                  </button>
+                  <button onClick={() => openEditModal(topic)} className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-500 hover:text-indigo-600 flex items-center justify-center transition" title="Tahrirlash">
                     <i className="fa-solid fa-pen text-xs"></i>
                   </button>
-                  <button onClick={() => handleDelete(topic.id)} className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 hover:text-red-700 flex items-center justify-center transition">
+                  <button onClick={() => handleDelete(topic.id)} className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 hover:text-red-700 flex items-center justify-center transition" title="O'chirish">
                     <i className="fa-solid fa-trash text-xs"></i>
                   </button>
                 </div>
@@ -676,6 +862,160 @@ const BlockDetails = () => {
               <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end space-x-3">
                 <button type="button" onClick={() => setIsQuizModalOpen(false)} className="px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium hover:bg-gray-200 transition">Bekor qilish</button>
                 <button type="submit" className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold shadow-md shadow-green-600/20 transition">{editingTopic ? "Saqlash" : "Testni yaratish"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isEditBlockModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4 border border-gray-100 dark:border-gray-700 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <i className="fa-solid fa-pen-to-square"></i>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Blok Ma'lumotlarini Tahrirlash</h3>
+              </div>
+              <button 
+                onClick={() => setIsEditBlockModalOpen(false)} 
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <i className="fa-solid fa-xmark text-lg"></i>
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveBlock} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Mavzu / Blok Sarlavhasi <span className="text-red-500">*</span>
+                </label>
+                <input 
+                  type="text" 
+                  value={blockFormData.title} 
+                  onChange={(e) => setBlockFormData({ ...blockFormData, title: e.target.value })}
+                  placeholder="Masalan: Python Asoslari" 
+                  className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                  required 
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Kategoriya <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="text"
+                    value={blockFormData.category} 
+                    onChange={(e) => setBlockFormData({ ...blockFormData, category: e.target.value })}
+                    placeholder="Masalan: Dasturlash" 
+                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                    required 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Nishon matni (Badge)
+                  </label>
+                  <input 
+                    type="text" 
+                    value={blockFormData.badge} 
+                    onChange={(e) => setBlockFormData({ ...blockFormData, badge: e.target.value })}
+                    placeholder={blockFormData.category || "Avtomatik"} 
+                    className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Nishon rangi va stili
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {BADGE_THEMES.map((theme) => (
+                    <button
+                      key={theme.label}
+                      type="button"
+                      onClick={() => setSelectedBadgeClass(theme.class)}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition border ${theme.class} ${
+                        selectedBadgeClass === theme.class 
+                          ? 'ring-2 ring-indigo-500 border-indigo-500' 
+                          : 'border-transparent opacity-75 hover:opacity-100'
+                      }`}
+                    >
+                      {theme.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Qisqacha Tavsif
+                </label>
+                <textarea 
+                  value={blockFormData.desc} 
+                  onChange={(e) => setBlockFormData({ ...blockFormData, desc: e.target.value })}
+                  rows="3" 
+                  placeholder="Blok haqida qisqacha ma'lumot..." 
+                  className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                ></textarea>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Qaysi guruhlarga ruxsat etiladi?
+                  </label>
+                  {availableGroups.length > 0 && (
+                    <button 
+                      type="button" 
+                      onClick={handleSelectAllGroups} 
+                      className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                    >
+                      {selectedGroupIds.length === availableGroups.length ? "Barchasini bekor qilish" : "Barchasini tanlash"}
+                    </button>
+                  )}
+                </div>
+                
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 border border-gray-100 dark:border-gray-700 rounded-xl p-2 bg-gray-50/50 dark:bg-gray-750">
+                  {availableGroups.map(group => (
+                    <label key={group.id} className="flex items-center space-x-2.5 cursor-pointer p-1.5 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedGroupIds.includes(group.id)}
+                        onChange={() => toggleGroupSelection(group.id)}
+                        className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                      />
+                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{group.name}</span>
+                      <span className="text-xs text-gray-400">({(group.students || []).length} ta o'quvchi)</span>
+                    </label>
+                  ))}
+                  {availableGroups.length === 0 && (
+                    <p className="text-xs text-gray-500 p-2">Hozircha guruhlar yo'q.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end space-x-3 border-t border-gray-100 dark:border-gray-700">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEditBlockModalOpen(false)} 
+                  className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl text-sm font-medium hover:bg-gray-200 transition"
+                >
+                  Bekor qilish
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSavingBlock}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm transition disabled:opacity-50 flex items-center space-x-2"
+                >
+                  {isSavingBlock && <i className="fa-solid fa-spinner fa-spin text-xs"></i>}
+                  <span>Saqlash</span>
+                </button>
               </div>
             </form>
           </div>
