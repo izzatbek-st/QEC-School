@@ -2,6 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { API_URL, apiFetch } from '../api';
 import QuizMistakesModal from '../components/QuizMistakesModal';
 
+const LEVEL_CONFIG = {
+  1: {
+    title: "Boshlang'ich",
+    badgeBg: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+    icon: "fa-seedling"
+  },
+  2: {
+    title: "Izlanuvchi",
+    badgeBg: "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+    icon: "fa-compass"
+  },
+  3: {
+    title: "Bilimdon",
+    badgeBg: "bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+    icon: "fa-graduation-cap"
+  },
+  4: {
+    title: "Mutaxassis",
+    badgeBg: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+    icon: "fa-award"
+  },
+  5: {
+    title: "Grandmaster",
+    badgeBg: "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+    icon: "fa-crown"
+  }
+};
+
 const Results = () => {
   const [activeTab, setActiveTab] = useState('attempts'); // 'attempts' | 'students'
   const [attempts, setAttempts] = useState([]);
@@ -109,7 +137,10 @@ const Results = () => {
 
   const filteredStudents = students.filter((s) => {
     const q = search.toLowerCase();
-    const matchesSearch = s.name.toLowerCase().includes(q);
+    const matchesSearch =
+      s.name.toLowerCase().includes(q) ||
+      (s.username || '').toLowerCase().includes(q) ||
+      (s.group_name || '').toLowerCase().includes(q);
     const matchesGroup =
       selectedGroup === 'all' || String(s.group_id) === String(selectedGroup);
     return matchesSearch && matchesGroup;
@@ -386,52 +417,168 @@ const Results = () => {
 
         {/* TAB 2: STUDENTS LEADERBOARD TABLE */}
         {activeTab === 'students' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50/50 dark:bg-gray-700/30 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">
-                  <th className="p-4 font-semibold">Reyting</th>
-                  <th className="p-4 font-semibold">O'quvchi</th>
-                  <th className="p-4 font-semibold">Guruh ID</th>
-                  <th className="p-4 font-semibold text-right">To'plagan Ball</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
-                {filteredStudents.map((student, idx) => (
-                  <tr key={student.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                    <td className="p-4">
-                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${idx === 0 ? 'bg-amber-100 text-amber-600' : idx === 1 ? 'bg-gray-200 text-gray-600' : idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-gray-50 text-gray-500'}`}>
-                        {idx + 1}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-sm ${student.color || 'bg-indigo-100 text-indigo-600'}`}>
-                          {student.initials}
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-900 dark:text-gray-100">{student.name}</h4>
-                        </div>
+          <div className="space-y-6 p-6">
+            {/* TOP 3 PODIUM */}
+            {!search && filteredStudents.length >= 2 && (
+              <div className="bg-gradient-to-b from-gray-50 to-white dark:from-gray-800/60 dark:to-gray-800 rounded-3xl p-6 border border-gray-100 dark:border-gray-700/80 shadow-sm">
+                <div className="text-center mb-5">
+                  <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 inline-flex items-center gap-1.5">
+                    <i className="fa-solid fa-crown text-amber-500"></i>
+                    Yetakchilar Shoxsupasi
+                  </span>
+                  <h3 className="text-lg font-black text-gray-900 dark:text-white mt-1">
+                    Eng yuqori XP ball to'plagan o'quvchilar
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 sm:gap-6 items-end max-w-xl mx-auto pt-4">
+                  {/* 2-O'RIN */}
+                  <div className="flex flex-col items-center">
+                    <div className="relative mb-2">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-black text-sm sm:text-base flex items-center justify-center shadow border-2 border-slate-300 dark:border-slate-500">
+                        {filteredStudents[1]?.initials || "2"}
                       </div>
-                    </td>
-                    <td className="p-4 text-gray-600 dark:text-gray-300">
-                      Guruh #{student.group_id}
-                    </td>
-                    <td className="p-4 text-right">
-                      <span className="font-bold text-gray-900 dark:text-white text-lg">{student.score}</span>
-                      <span className="text-gray-400 text-xs ml-1">ball</span>
-                    </td>
+                      <span className="absolute -top-2.5 -right-1 text-xs">🥈</span>
+                    </div>
+                    <h5 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white text-center truncate max-w-[90px] sm:max-w-[120px]">
+                      {filteredStudents[1]?.name || "—"}
+                    </h5>
+                    <span className="text-[10px] sm:text-xs text-indigo-600 dark:text-indigo-400 font-bold mt-0.5">
+                      {filteredStudents[1]?.score ?? 0} XP
+                    </span>
+                    <div className="w-full h-20 sm:h-24 bg-gradient-to-t from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-700/60 rounded-t-2xl border-t-4 border-slate-400 flex flex-col items-center justify-center shadow-inner mt-2">
+                      <span className="text-lg sm:text-xl font-black text-slate-500 dark:text-slate-300">2</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Kumush</span>
+                    </div>
+                  </div>
+
+                  {/* 1-O'RIN */}
+                  <div className="flex flex-col items-center -mt-4">
+                    <div className="relative mb-2">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-200 font-black text-base sm:text-lg flex items-center justify-center shadow-lg border-4 border-amber-400">
+                        {filteredStudents[0]?.initials || "1"}
+                      </div>
+                      <span className="absolute -top-3.5 -right-1 text-xl">👑</span>
+                    </div>
+                    <span className="px-2 py-0.2 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 mb-0.5">
+                      Chempion
+                    </span>
+                    <h5 className="font-black text-xs sm:text-sm text-gray-900 dark:text-white text-center truncate max-w-[100px] sm:max-w-[140px]">
+                      {filteredStudents[0]?.name || "—"}
+                    </h5>
+                    <span className="text-xs sm:text-sm font-black text-amber-500 mt-0.5">
+                      {filteredStudents[0]?.score ?? 0} XP
+                    </span>
+                    <div className="w-full h-28 sm:h-32 bg-gradient-to-t from-amber-200 via-amber-100 to-amber-50 dark:from-amber-950/60 dark:to-amber-900/30 rounded-t-2xl border-t-4 border-amber-400 flex flex-col items-center justify-center shadow mt-2">
+                      <span className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-300">1</span>
+                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase">Oltin</span>
+                    </div>
+                  </div>
+
+                  {/* 3-O'RIN */}
+                  <div className="flex flex-col items-center">
+                    <div className="relative mb-2">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300 font-black text-sm sm:text-base flex items-center justify-center shadow border-2 border-orange-300 dark:border-orange-600">
+                        {filteredStudents[2]?.initials || "3"}
+                      </div>
+                      <span className="absolute -top-2.5 -right-1 text-xs">🥉</span>
+                    </div>
+                    <h5 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white text-center truncate max-w-[90px] sm:max-w-[120px]">
+                      {filteredStudents[2]?.name || "—"}
+                    </h5>
+                    <span className="text-[10px] sm:text-xs text-indigo-600 dark:text-indigo-400 font-bold mt-0.5">
+                      {filteredStudents[2]?.score ?? 0} XP
+                    </span>
+                    <div className="w-full h-16 sm:h-20 bg-gradient-to-t from-orange-200 to-orange-100 dark:from-orange-950/40 dark:to-orange-900/20 rounded-t-2xl border-t-4 border-orange-400 flex flex-col items-center justify-center shadow-inner mt-2">
+                      <span className="text-lg sm:text-xl font-black text-orange-600 dark:text-orange-400">3</span>
+                      <span className="text-[9px] font-bold text-orange-500 uppercase">Bronza</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/50 dark:bg-gray-700/30 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">
+                    <th className="p-4 font-semibold text-center w-16">Reyting</th>
+                    <th className="p-4 font-semibold">O'quvchi</th>
+                    <th className="p-4 font-semibold">Guruh</th>
+                    <th className="p-4 font-semibold">Daraja</th>
+                    <th className="p-4 font-semibold text-center">Aniqlik</th>
+                    <th className="p-4 font-semibold text-center">Bajarilgan</th>
+                    <th className="p-4 font-semibold text-right">To'plangan XP</th>
                   </tr>
-                ))}
-                {filteredStudents.length === 0 && (
-                  <tr>
-                    <td colSpan="4" className="text-center p-8 text-gray-500">
-                      O'quvchilar topilmadi yoki baza bo'sh.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+                  {filteredStudents.map((student, idx) => {
+                    const level = student.level_info?.level || 1;
+                    const meta = LEVEL_CONFIG[level] || LEVEL_CONFIG[1];
+
+                    let medal = null;
+                    if (student.rank === 1 || (!student.rank && idx === 0)) medal = "🥇";
+                    else if (student.rank === 2 || (!student.rank && idx === 1)) medal = "🥈";
+                    else if (student.rank === 3 || (!student.rank && idx === 2)) medal = "🥉";
+
+                    return (
+                      <tr key={student.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <td className="p-4 text-center">
+                          {medal ? (
+                            <span className="text-xl">{medal}</span>
+                          ) : (
+                            <span className="w-8 h-8 mx-auto rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold flex items-center justify-center text-xs">
+                              {student.rank || (idx + 1)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-10 h-10 rounded-2xl font-bold flex items-center justify-center text-xs shadow-sm ${student.color || 'bg-indigo-100 text-indigo-600'}`}>
+                              {student.initials}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-gray-900 dark:text-gray-100">{student.name}</h4>
+                              <span className="text-xs text-gray-400">@{student.username}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 text-gray-600 dark:text-gray-300">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            {student.group_name || `Guruh #${student.group_id}`}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 border ${meta.badgeBg}`}>
+                            <i className={`fa-solid ${meta.icon}`}></i>
+                            <span>{student.level_info?.title || meta.title}</span>
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className="font-bold text-gray-900 dark:text-white">
+                            {student.accuracy_pct ?? 0}%
+                          </span>
+                        </td>
+                        <td className="p-4 text-center text-xs text-gray-500 dark:text-gray-400">
+                          <span>{student.completed_lessons ?? 0} dars</span> · <span>{student.completed_quizzes ?? 0} test</span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className="font-black text-gray-900 dark:text-white text-lg">{student.score}</span>
+                          <span className="text-amber-500 font-bold text-xs ml-1">XP</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredStudents.length === 0 && (
+                    <tr>
+                      <td colSpan="7" className="text-center p-8 text-gray-500">
+                        O'quvchilar topilmadi yoki baza bo'sh.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

@@ -222,6 +222,43 @@ const QuizViewer = ({ qDataList, topicId, initialAttempt = null, isCompleted = f
             </div>
           </div>
 
+          {/* XP REWARD BANNER */}
+          {quizScore?.earned_xp != null && (
+            <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-400 text-amber-950 font-black text-lg flex items-center justify-center shadow-lg">
+                  <i className="fa-solid fa-star"></i>
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm sm:text-base text-amber-200">
+                    +{quizScore.earned_xp} XP to'plandi!
+                  </h4>
+                  <div className="flex items-center gap-2 text-xs text-white/80 flex-wrap">
+                    <span>+{quizScore.xp_breakdown?.base_xp || (correct * 10)} XP to'g'ri javoblar</span>
+                    {quizScore.xp_breakdown?.pass_bonus > 0 && (
+                      <span>· +{quizScore.xp_breakdown.pass_bonus} XP o'tish bonusi</span>
+                    )}
+                    {quizScore.xp_breakdown?.perfect_bonus > 0 && (
+                      <span className="text-amber-300 font-bold">· +{quizScore.xp_breakdown.perfect_bonus} XP 100% mukammal natija! 👑</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {quizScore.total_score != null && (
+                <div className="text-left sm:text-right shrink-0">
+                  <span className="text-[11px] text-white/70 uppercase block font-semibold">Umumiy hisobingiz</span>
+                  <span className="text-lg font-black text-white">
+                    {quizScore.total_score} <span className="text-xs font-bold text-amber-300">XP</span>
+                    {quizScore.level_info?.title && (
+                      <span className="ml-1.5 text-xs font-normal text-white/80">({quizScore.level_info.title})</span>
+                    )}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* FILTER CONTROLS & NEXT LESSON ACTION */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
             <div className="flex items-center gap-2 flex-wrap">

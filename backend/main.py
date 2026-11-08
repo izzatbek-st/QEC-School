@@ -420,6 +420,214 @@ def ensure_quiz_attempts_columns():
 ensure_quiz_attempts_columns()
 
 
+# ========================================
+# GAMIFICATION & LEADERBOARD HELPERS
+# ========================================
+
+def get_student_level_info(score: int) -> dict:
+    score = max(0, score or 0)
+    if score <= 100:
+        level = 1
+        title = "Boshlang'ich"
+        badge_color = "emerald"
+        icon = "fa-seedling"
+        min_xp = 0
+        max_xp = 100
+        next_level_xp = 101
+        xp_needed = max(0, 101 - score)
+        progress_pct = min(100, max(0, round((score / 100) * 100)))
+    elif score <= 300:
+        level = 2
+        title = "Izlanuvchi"
+        badge_color = "blue"
+        icon = "fa-compass"
+        min_xp = 101
+        max_xp = 300
+        next_level_xp = 301
+        xp_needed = max(0, 301 - score)
+        progress_pct = min(100, max(0, round(((score - 100) / 200) * 100)))
+    elif score <= 700:
+        level = 3
+        title = "Bilimdon"
+        badge_color = "purple"
+        icon = "fa-graduation-cap"
+        min_xp = 301
+        max_xp = 700
+        next_level_xp = 701
+        xp_needed = max(0, 701 - score)
+        progress_pct = min(100, max(0, round(((score - 300) / 400) * 100)))
+    elif score <= 1500:
+        level = 4
+        title = "Mutaxassis"
+        badge_color = "amber"
+        icon = "fa-award"
+        min_xp = 701
+        max_xp = 1500
+        next_level_xp = 1501
+        xp_needed = max(0, 1501 - score)
+        progress_pct = min(100, max(0, round(((score - 700) / 800) * 100)))
+    else:
+        level = 5
+        title = "Grandmaster"
+        badge_color = "rose"
+        icon = "fa-crown"
+        min_xp = 1501
+        max_xp = None
+        next_level_xp = None
+        xp_needed = 0
+        progress_pct = 100
+
+    return {
+        "level": level,
+        "title": title,
+        "badge_color": badge_color,
+        "icon": icon,
+        "current_xp": score,
+        "min_xp": min_xp,
+        "max_xp": max_xp,
+        "next_level_xp": next_level_xp,
+        "xp_needed": xp_needed,
+        "progress_pct": progress_pct,
+    }
+
+
+def recalculate_student_score(student_id: int, db: Session) -> int:
+    lessons_count = db.query(models.LessonCompletion).filter(
+        models.LessonCompletion.student_id == student_id
+    ).count()
+
+    attempts = db.query(models.QuizAttempt).filter(
+        models.QuizAttempt.student_id == student_id
+    ).all()
+
+    quiz_xp = 0
+    for att in attempts:
+        total_q = att.total_questions or 1
+        best_c = att.best_score or 0
+        topic = att.topic
+        pass_req = topic.passing_score if (topic and topic.passing_score is not None) else 70
+        pct = round((best_c / total_q) * 100)
+
+        # 10 XP per correct question
+        base_xp = best_c * 10
+        # +30 XP bonus if passed
+        pass_bonus = 30 if pct >= pass_req else 0
+        # +50 XP bonus if 100% perfect
+        perfect_bonus = 50 if (best_c == total_q and total_q > 0) else 0
+
+        quiz_xp += (base_xp + pass_bonus + perfect_bonus)
+
+    total_xp = (lessons_count * 20) + quiz_xp
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if student:
+        student.score = total_xp
+        db.commit()
+    return total_xp
+
+
+def get_student_stats(student_id: int, db: Session) -> dict:
+    completions_count = db.query(models.LessonCompletion).filter(
+        models.LessonCompletion.student_id == student_id
+    ).count()
+    attempts = db.query(models.QuizAttempt).filter(
+        models.QuizAttempt.student_id == student_id
+    ).all()
+
+    total_questions = sum(a.total_questions for a in attempts)
+    total_correct = sum(a.best_score for a in attempts)
+    accuracy_pct = round((total_correct / (total_questions or 1)) * 100) if total_questions > 0 else 0
+    passed_quizzes = 0
+    perfect_quizzes = 0
+
+    for a in attempts:
+        t_pass = (a.topic.passing_score if a.topic and a.topic.passing_score is not None else 70)
+        pct = round((a.best_score / (a.total_questions or 1)) * 100)
+        if pct >= t_pass:
+            passed_quizzes += 1
+        if a.best_score == a.total_questions and a.total_questions > 0:
+            perfect_quizzes += 1
+
+    return {
+        "completed_lessons": completions_count,
+        "completed_quizzes": len(attempts),
+        "total_completed": completions_count + len(attempts),
+        "total_questions": total_questions,
+        "total_correct": total_correct,
+        "accuracy_pct": accuracy_pct,
+        "passed_quizzes": passed_quizzes,
+        "perfect_quizzes": perfect_quizzes,
+    }
+
+
+def get_leaderboard_data(db: Session, group_id: Optional[int] = None) -> List[dict]:
+    query = db.query(models.Student)
+    if group_id:
+        query = query.filter(models.Student.group_id == group_id)
+    students = query.all()
+
+    # Pre-fetch completions and attempts in bulk
+    all_completions = db.query(models.LessonCompletion).all()
+    student_lessons_map = {}
+    for c in all_completions:
+        student_lessons_map[c.student_id] = student_lessons_map.get(c.student_id, 0) + 1
+
+    all_attempts = db.query(models.QuizAttempt).all()
+    student_attempts_map = {}
+    for a in all_attempts:
+        student_attempts_map.setdefault(a.student_id, []).append(a)
+
+    board = []
+    for s in students:
+        lessons_cnt = student_lessons_map.get(s.id, 0)
+        s_attempts = student_attempts_map.get(s.id, [])
+        quizzes_cnt = len(s_attempts)
+        total_questions = sum(a.total_questions for a in s_attempts)
+        total_correct = sum(a.best_score for a in s_attempts)
+        accuracy_pct = round((total_correct / (total_questions or 1)) * 100) if total_questions > 0 else 0
+        total_completed = lessons_cnt + quizzes_cnt
+
+        level_info = get_student_level_info(s.score)
+
+        board.append({
+            "id": s.id,
+            "name": s.name,
+            "initials": s.initials,
+            "username": s.username,
+            "color": s.color,
+            "score": s.score,
+            "group_id": s.group_id,
+            "group_name": s.group.name if s.group else "Noma'lum",
+            "accuracy_pct": accuracy_pct,
+            "completed_lessons": lessons_cnt,
+            "completed_quizzes": quizzes_cnt,
+            "total_completed": total_completed,
+            "total_questions": total_questions,
+            "total_correct": total_correct,
+            "level_info": level_info,
+        })
+
+    # Multi-factor sort:
+    # 1. Total score (XP) descending
+    # 2. Accuracy % descending
+    # 3. Total completed tasks descending
+    # 4. ID ascending
+    board.sort(key=lambda x: (-x["score"], -x["accuracy_pct"], -x["total_completed"], x["id"]))
+
+    for idx, item in enumerate(board, start=1):
+        item["rank"] = idx
+
+    return board
+
+
+def migrate_student_scores(db: Session):
+    try:
+        students = db.query(models.Student).all()
+        for s in students:
+            recalculate_student_score(s.id, db)
+    except Exception as e:
+        print("migrate_student_scores notice:", e)
+
+
 def init_db(db: Session):
     models.Base.metadata.create_all(bind=engine)
     ensure_quiz_attempts_columns()
@@ -447,6 +655,7 @@ def startup_event():
             try:
                 init_db(db)
                 seed_from_template_if_empty(db)
+                migrate_student_scores(db)
                 settings = db.query(models.Settings).first()
                 if settings and not settings.password.startswith(PASSWORD_PREFIX):
                     settings.password = hash_password(
@@ -853,9 +1062,12 @@ def delete_student(student_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Student deleted successfully"}
 
-@app.get("/api/teacher/results", response_model=List[schemas.Student], dependencies=[Depends(require_teacher)])
-def get_results(db: Session = Depends(get_db)):
-    return db.query(models.Student).order_by(models.Student.score.desc()).all()
+@app.get("/api/teacher/results", dependencies=[Depends(require_teacher)])
+def get_results(
+    group_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    return get_leaderboard_data(db, group_id)
 
 
 # ========================================
@@ -864,22 +1076,11 @@ def get_results(db: Session = Depends(get_db)):
 
 @app.get("/api/results/leaderboard")
 def get_leaderboard(
+    group_id: Optional[int] = None,
     db: Session = Depends(get_db),
     _current_user: dict = Depends(get_current_user),
 ):
-    students = db.query(models.Student).order_by(models.Student.score.desc()).all()
-    result = []
-    for s in students:
-        group_name = s.group.name if s.group else "Noma'lum"
-        result.append({
-            "id": s.id,
-            "name": s.name,
-            "initials": s.initials,
-            "color": s.color,
-            "score": s.score,
-            "group_name": group_name
-        })
-    return result
+    return get_leaderboard_data(db, group_id)
 
 @app.get("/api/student/{student_id}/dashboard")
 def get_student_dashboard(
@@ -894,26 +1095,44 @@ def get_student_dashboard(
     
     group = student.group
     blocks_count = len(group.blocks) if group else 0
-    completed_tasks = db.query(models.QuizAttempt).filter(
-        models.QuizAttempt.student_id == student_id
-    ).count()
-    rank = db.query(models.Student).filter(
-        models.Student.score > student.score
-    ).count() + 1
-    
+
+    global_board = get_leaderboard_data(db)
+    student_entry = next((s for s in global_board if s["id"] == student.id), None)
+    global_rank = student_entry["rank"] if student_entry else 1
+
+    group_rank = 1
+    if student.group_id:
+        group_board = [s for s in global_board if s["group_id"] == student.group_id]
+        for g_idx, g_item in enumerate(group_board, start=1):
+            if g_item["id"] == student.id:
+                group_rank = g_idx
+                break
+
+    stats = get_student_stats(student.id, db)
+    level_info = get_student_level_info(student.score)
+
     return {
         "student": {
             "id": student.id,
             "name": student.name,
+            "initials": student.initials,
+            "color": student.color,
             "score": student.score,
+            "group_id": student.group_id,
             "group_name": group.name if group else "Noma'lum"
         },
         "stats": {
             "active_blocks": blocks_count,
-            "completed_tasks": completed_tasks,
+            "completed_tasks": stats["total_completed"],
+            "completed_lessons": stats["completed_lessons"],
+            "completed_quizzes": stats["completed_quizzes"],
+            "accuracy_pct": stats["accuracy_pct"],
             "total_score": student.score,
-            "rank": rank
-        }
+            "rank": global_rank,
+            "group_rank": group_rank,
+            "total_students": len(global_board),
+        },
+        "level_info": level_info
     }
 
 @app.get("/api/student/{student_id}/blocks", response_model=List[schemas.Block])
@@ -1178,8 +1397,19 @@ def complete_lesson(
         )
         db.add(comp)
         db.commit()
+        recalculate_student_score(student_id, db)
 
-    return {"message": "Mavzu muvaffaqiyatli yakunlandi", "completed": True}
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    new_total = student.score if student else 0
+    level_info = get_student_level_info(new_total)
+
+    return {
+        "message": "Mavzu muvaffaqiyatli yakunlandi! +20 XP berildi.",
+        "completed": True,
+        "earned_xp": 20,
+        "total_score": new_total,
+        "level_info": level_info
+    }
 
 
 @app.post("/api/student/topics/{topic_id}/attempts")
@@ -1277,7 +1507,6 @@ def submit_quiz_attempt(
         results_data=json.dumps(result_questions, ensure_ascii=False),
         created_at=now,
     )
-    student.score += correct_count
     db.add(attempt)
 
     try:
@@ -1290,6 +1519,16 @@ def submit_quiz_attempt(
     passing_score = topic.passing_score if topic.passing_score is not None else 70
     percentage = round((correct_count / (len(questions) or 1)) * 100)
     is_passed = percentage >= passing_score
+    is_perfect = (correct_count == len(questions) and len(questions) > 0)
+
+    # Deterministic recalculation
+    total_score = recalculate_student_score(student.id, db)
+    level_info = get_student_level_info(total_score)
+
+    base_xp = correct_count * 10
+    pass_bonus = 30 if is_passed else 0
+    perfect_bonus = 50 if is_perfect else 0
+    earned_xp = base_xp + pass_bonus + perfect_bonus
 
     return {
         "id": attempt.id,
@@ -1301,6 +1540,16 @@ def submit_quiz_attempt(
         "percentage": percentage,
         "passing_score": passing_score,
         "is_passed": is_passed,
+        "is_perfect": is_perfect,
+        "earned_xp": earned_xp,
+        "xp_breakdown": {
+            "base_xp": base_xp,
+            "pass_bonus": pass_bonus,
+            "perfect_bonus": perfect_bonus,
+            "total_earned": earned_xp
+        },
+        "total_score": total_score,
+        "level_info": level_info,
         "attempt_count": 1,
         "questions": result_questions,
         "answers": submission.answers,
@@ -1464,12 +1713,12 @@ def delete_teacher_attempt(
     att = db.query(models.QuizAttempt).filter(models.QuizAttempt.id == attempt_id).first()
     if not att:
         raise HTTPException(status_code=404, detail="Test natijasi topilmadi")
-    student = att.student
-    if student:
-        student.score = max(0, student.score - att.best_score)
+    student_id = att.student_id
     db.delete(att)
     db.commit()
-    return {"message": "Test natijasi o'chirildi. O'quvchi testni qayta topshirishi mumkin."}
+    if student_id:
+        recalculate_student_score(student_id, db)
+    return {"message": "Test natijasi bekor qilindi. O'quvchi testni qayta topshirishi mumkin."}
 
 
 @app.post("/api/teacher/blocks/{block_id}/topics", response_model=schemas.Topic, dependencies=[Depends(require_teacher)])
