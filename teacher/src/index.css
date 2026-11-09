@@ -5,4 +5,16 @@
   body {
     @apply font-sans;
   }
+
+  .ql-snow .ql-editor iframe.ql-video,
+  .ql-editor iframe.ql-video,
+  .prose iframe.ql-video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 0.75rem;
+    margin: 1.5rem 0;
+    border: none;
+    display: block;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
 }

@@ -3,6 +3,7 @@ import QuizViewer from '../components/QuizViewer';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { API_URL, apiFetch } from '../api';
 import DOMPurify from 'dompurify';
+import { getVideoMeta, sanitizeLessonHtml } from '../utils/videoUtils';
 import './LessonContent.css';
 
 const LessonViewer = () => {
@@ -137,24 +138,7 @@ const LessonViewer = () => {
     setActiveIndex(index);
   };
 
-  // Helper to extract Youtube Embed URL
-  const getEmbedUrl = (url) => {
-    if (!url) return null;
-    let embedUrl = url;
-    if (url.includes('youtube.com/watch?v=')) {
-      embedUrl = url.replace('watch?v=', 'embed/');
-      const ampersandPosition = embedUrl.indexOf('&');
-      if (ampersandPosition !== -1) {
-        embedUrl = embedUrl.substring(0, ampersandPosition);
-      }
-    } else if (url.includes('youtu.be/')) {
-      embedUrl = url.replace('youtu.be/', 'youtube.com/embed/');
-    }
-    return embedUrl;
-  };
-
-  const embedUrl = getEmbedUrl(activeTopic.video_url);
-  const isYoutube = embedUrl && embedUrl.includes('youtube.com/embed/');
+  const videoMeta = getVideoMeta(activeTopic.video_url);
 
   return (
     <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-6">
@@ -255,24 +239,31 @@ const LessonViewer = () => {
           ) : (
             <>
               {/* Video Player */}
-              {embedUrl && (
-                <div className="w-full aspect-video bg-black rounded-xl overflow-hidden mb-8 shadow-2xl relative">
-                  {isYoutube ? (
+              {videoMeta && (
+                <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden mb-8 shadow-2xl relative border border-gray-200 dark:border-gray-800">
+                  {videoMeta.type === 'youtube' || videoMeta.type === 'vimeo' ? (
                     <iframe 
-                      src={embedUrl} 
-                      className="w-full h-full absolute top-0 left-0" 
+                      src={videoMeta.embedUrl} 
+                      className="w-full h-full absolute top-0 left-0 border-0" 
                       title={activeTopic.title}
-                      frameBorder="0" 
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                       allowFullScreen
+                      loading="lazy"
                     ></iframe>
                   ) : (
                     <video 
-                      src={embedUrl} 
+                      key={videoMeta.embedUrl}
                       controls 
+                      playsInline
+                      preload="metadata"
                       className="w-full h-full absolute top-0 left-0 outline-none object-contain bg-black"
                       controlsList="nodownload"
-                    ></video>
+                    >
+                      <source src={videoMeta.embedUrl} type="video/mp4" />
+                      <source src={videoMeta.embedUrl} type="video/webm" />
+                      <source src={videoMeta.embedUrl} type="video/ogg" />
+                      Sizning brauzeringiz videoni to'g'ridan-to'g'ri ko'rishni qo'llab-quvvatlamaydi.
+                    </video>
                   )}
                 </div>
               )}
@@ -343,7 +334,7 @@ const LessonViewer = () => {
                   <div>
                     <div className="ql-snow">
                       <div className="ql-editor p-0 text-gray-800 dark:text-gray-300 font-sans leading-relaxed">
-                        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(activeTopic.content || '') }} />
+                        <div dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(activeTopic.content || '') }} />
                       </div>
                     </div>
 

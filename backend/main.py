@@ -2,7 +2,9 @@ import base64
 import hashlib
 import hmac
 import json
+import mimetypes
 import os
+import re
 import secrets
 import time
 import uuid
@@ -10,8 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Request, Response
+from fastapi.responses import RedirectResponse, FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -89,7 +91,94 @@ app = FastAPI(
     redoc_url=None if production else "/redoc",
 )
 
-app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+@app.head("/uploads/{file_name:path}")
+@app.get("/uploads/{file_name:path}")
+async def serve_upload(file_name: str, request: Request):
+    """
+    Serves uploaded media files with full HTTP 206 Partial Content (Range request)
+    support so video players on mobile (iOS/Android) and desktop can stream, seek,
+    and buffer properly without issues.
+    """
+    target_path = (UPLOADS_DIR / file_name).resolve()
+    uploads_resolved = UPLOADS_DIR.resolve()
+
+    if not str(target_path).startswith(str(uploads_resolved)) or not target_path.is_file():
+        raise HTTPException(status_code=404, detail="Fayl topilmadi")
+
+    file_size = target_path.stat().st_size
+    content_type, _ = mimetypes.guess_type(str(target_path))
+    content_type = content_type or "application/octet-stream"
+
+    base_headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=86400",
+    }
+
+    if request.method == "HEAD":
+        return Response(
+            status_code=200,
+            headers={
+                **base_headers,
+                "Content-Length": str(file_size),
+                "Content-Type": content_type,
+            }
+        )
+
+    range_header = request.headers.get("range")
+    if not range_header:
+        return FileResponse(
+            str(target_path),
+            media_type=content_type,
+            headers={
+                **base_headers,
+                "Content-Length": str(file_size),
+            }
+        )
+
+    range_match = re.match(r"^bytes=(\d+)-(\d+)?$", range_header.strip())
+    if not range_match:
+        return Response(
+            status_code=416,
+            headers={"Content-Range": f"bytes */{file_size}"}
+        )
+
+    start_str, end_str = range_match.groups()
+    start = int(start_str)
+    end = int(end_str) if end_str is not None else file_size - 1
+
+    if start >= file_size or end >= file_size or start > end:
+        return Response(
+            status_code=416,
+            headers={"Content-Range": f"bytes */{file_size}"}
+        )
+
+    content_length = end - start + 1
+
+    def file_iterator(path: Path, start_pos: int, length: int, chunk_size: int = 128 * 1024):
+        with open(path, "rb") as f:
+            f.seek(start_pos)
+            bytes_left = length
+            while bytes_left > 0:
+                read_amount = min(chunk_size, bytes_left)
+                chunk = f.read(read_amount)
+                if not chunk:
+                    break
+                bytes_left -= len(chunk)
+                yield chunk
+
+    response_headers = {
+        **base_headers,
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Content-Length": str(content_length),
+        "Content-Type": content_type,
+    }
+
+    return StreamingResponse(
+        file_iterator(target_path, start, content_length),
+        status_code=206,
+        headers=response_headers,
+        media_type=content_type,
+    )
 
 # Dynamic frontend discovery and mounting for single-container deployment (Render / Docker)
 def find_frontend_dir(name: str) -> str | None:

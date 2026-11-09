@@ -3,6 +3,7 @@ import QuizBuilder from '../components/QuizBuilder';
 import { useParams, Link } from 'react-router-dom';
 import { API_URL, apiFetch } from '../api';
 import DOMPurify from 'dompurify';
+import { getVideoMeta, sanitizeLessonHtml } from '../utils/videoUtils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ReactQuill, { Quill } from 'react-quill-new';
@@ -35,6 +36,8 @@ const BlockDetails = () => {
   const [isEditBlockModalOpen, setIsEditBlockModalOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState(null);
   const [topicContent, setTopicContent] = useState('');
+  const [modalVideoUrl, setModalVideoUrl] = useState('');
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   
   const [availableGroups, setAvailableGroups] = useState([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState([]);
@@ -58,8 +61,10 @@ const BlockDetails = () => {
   const quillRef = useRef(null);
 
   const uploadFile = async (file) => {
+    if (!file) return null;
     const formData = new FormData();
     formData.append('file', file);
+    setIsUploadingVideo(true);
     try {
       const res = await apiFetch('/api/upload', {
         method: 'POST',
@@ -74,6 +79,8 @@ const BlockDetails = () => {
       console.error(e);
       alert(e.message || 'Yuklashda xatolik yuz berdi');
       return null;
+    } finally {
+      setIsUploadingVideo(false);
     }
   };
 
@@ -215,13 +222,13 @@ const BlockDetails = () => {
   const handleSaveTopic = (e) => {
     e.preventDefault();
     const title = e.target.elements.title.value;
-    const video_url = e.target.elements.video_url.value;
+    const cleanVideoUrl = modalVideoUrl.trim();
     
     const payload = {
       title,
-      video_url: video_url || null,
+      video_url: cleanVideoUrl || null,
       content: topicContent,
-      order_index: topics.length,
+      order_index: editingTopic ? editingTopic.order_index : topics.length,
       item_type: 'lesson',
       quiz_data: null
     };
@@ -240,6 +247,7 @@ const BlockDetails = () => {
       fetchTopics();
       setIsModalOpen(false);
       setEditingTopic(null);
+      setModalVideoUrl('');
     })
     .catch(console.error);
   };
@@ -370,7 +378,8 @@ const BlockDetails = () => {
       }
       setIsQuizModalOpen(true);
     } else {
-      setTopicContent(DOMPurify.sanitize(topic?.content || ''));
+      setTopicContent(sanitizeLessonHtml(topic?.content || ''));
+      setModalVideoUrl(topic?.video_url || '');
       setIsModalOpen(true);
     }
   };
@@ -378,6 +387,7 @@ const BlockDetails = () => {
   const openNewModal = () => {
     setEditingTopic(null);
     setTopicContent('');
+    setModalVideoUrl('');
     setIsModalOpen(true);
   };
 
@@ -464,22 +474,14 @@ const BlockDetails = () => {
   };
 
   const videoHandler = () => {
-    const input = document.createElement('input');
-    input.setAttribute('type', 'file');
-    input.setAttribute('accept', 'video/*');
-    input.click();
-
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (file) {
-        const url = await uploadFile(file);
-        if (url) {
-          const quill = quillRef.current.getEditor();
-          const range = quill.getSelection(true);
-          quill.insertEmbed(range.index, 'video', url);
-        }
-      }
-    };
+    const raw = window.prompt("Video havolasini kiriting (YouTube, Vimeo yoki video URL):\n(Eslatma: Agar kompyuteringizdan video yuklamoqchi bo'lsangiz, «Asosiy Video» bo'limidagi fayl yuklash tugmasidan foydalanish tavsiya etiladi)");
+    if (raw && raw.trim()) {
+      const meta = getVideoMeta(raw.trim());
+      const embedUrl = meta?.embedUrl || raw.trim();
+      const quill = quillRef.current.getEditor();
+      const range = quill.getSelection(true);
+      quill.insertEmbed(range ? range.index : 0, 'video', embedUrl);
+    }
   };
 
   const modules = useMemo(() => ({
@@ -768,16 +770,45 @@ const BlockDetails = () => {
 
               {topic.item_type !== 'quiz' && (
                 <>
-                  {topic.video_url && (
-                    <div className="mb-4 ml-8 inline-flex items-center space-x-2 text-xs font-semibold bg-blue-50 text-blue-600 px-3 py-1 rounded-lg">
-                      <i className="fa-brands fa-youtube"></i>
-                      <span>Video biriktirilgan</span>
-                    </div>
-                  )}
+                  {topic.video_url && (() => {
+                    const meta = getVideoMeta(topic.video_url);
+                    return (
+                      <div className="mb-4 ml-8 space-y-2">
+                        <div className="inline-flex items-center space-x-2 text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-800">
+                          <i className={meta?.type === 'youtube' ? "fa-brands fa-youtube text-red-500" : "fa-solid fa-circle-play text-indigo-500"}></i>
+                          <span>{meta?.type === 'youtube' ? 'YouTube video' : meta?.type === 'vimeo' ? 'Vimeo video' : 'Video fayl'} biriktirilgan</span>
+                        </div>
+                        <div className="w-full max-w-xl aspect-video bg-black rounded-xl overflow-hidden shadow-md relative border border-gray-200 dark:border-gray-800">
+                          {meta?.type === 'youtube' || meta?.type === 'vimeo' ? (
+                            <iframe 
+                              src={meta.embedUrl} 
+                              className="w-full h-full absolute top-0 left-0 border-0" 
+                              title={topic.title}
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                              allowFullScreen
+                              loading="lazy"
+                            ></iframe>
+                          ) : (
+                            <video 
+                              key={meta?.embedUrl}
+                              controls 
+                              playsInline
+                              preload="metadata"
+                              className="w-full h-full absolute top-0 left-0 outline-none object-contain bg-black"
+                            >
+                              <source src={meta?.embedUrl} type="video/mp4" />
+                              <source src={meta?.embedUrl} type="video/webm" />
+                              <source src={meta?.embedUrl} type="video/ogg" />
+                            </video>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   
-                  <div className="ml-8 prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700 max-h-32 overflow-hidden relative">
+                  <div className="ml-8 prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700 max-h-48 overflow-hidden relative">
                     <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-gray-50 dark:from-gray-900/50 to-transparent"></div>
-                    <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(topic.content || '') }} />
+                    <div dangerouslySetInnerHTML={{ __html: sanitizeLessonHtml(topic.content || '') }} />
                   </div>
                 </>
               )}
@@ -816,21 +847,73 @@ const BlockDetails = () => {
                   <input type="text" name="title" defaultValue={editingTopic?.title || ''} placeholder="Masalan: 1-dars. O'zgaruvchilar" className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asosiy Video (Havola yoki Fayl yuklash)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Asosiy Video (YouTube yoki Fayl yuklash)
+                  </label>
                   <div className="flex space-x-2">
-                    <input type="text" id="video_url_input" name="video_url" defaultValue={editingTopic?.video_url || ''} placeholder="YouTube yoki MP4 havolasi" className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    <label className="cursor-pointer bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-xl flex items-center justify-center transition shrink-0">
-                      <i className="fa-solid fa-upload"></i>
-                      <input type="file" className="hidden" accept="video/mp4,video/webm,video/ogg" onChange={async (e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          const url = await uploadFile(file);
-                          if (url) {
-                            document.getElementById('video_url_input').value = url;
+                    <input 
+                      type="text" 
+                      id="video_url_input" 
+                      name="video_url" 
+                      value={modalVideoUrl}
+                      onChange={(e) => setModalVideoUrl(e.target.value)}
+                      placeholder="YouTube havolasi yoki MP4 manzili" 
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                    />
+                    <label 
+                      className={`cursor-pointer bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-xl flex items-center justify-center transition shrink-0 ${isUploadingVideo ? 'opacity-50 pointer-events-none' : ''}`}
+                      title="Video fayl yuklash (MP4, WebM)"
+                    >
+                      {isUploadingVideo ? (
+                        <i className="fa-solid fa-spinner fa-spin text-indigo-600"></i>
+                      ) : (
+                        <i className="fa-solid fa-upload"></i>
+                      )}
+                      <input 
+                        type="file" 
+                        disabled={isUploadingVideo}
+                        className="hidden" 
+                        accept="video/mp4,video/webm,video/ogg" 
+                        onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            const url = await uploadFile(file);
+                            if (url) {
+                              setModalVideoUrl(url);
+                            }
                           }
-                        }
-                      }} />
+                          e.target.value = '';
+                        }} 
+                      />
                     </label>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 min-h-[1.25rem]">
+                    {isUploadingVideo ? (
+                      <span className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1 font-medium">
+                        <i className="fa-solid fa-spinner fa-spin"></i> Video serverga yuklanmoqda...
+                      </span>
+                    ) : modalVideoUrl ? (
+                      (() => {
+                        const meta = getVideoMeta(modalVideoUrl);
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                              <i className="fa-solid fa-circle-check"></i>
+                              {meta?.type === 'youtube' ? 'YouTube video aniqlandi' : meta?.type === 'vimeo' ? 'Vimeo video' : 'Video fayl biriktirildi'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setModalVideoUrl('')}
+                              className="text-rose-500 hover:underline"
+                            >
+                              O'chirish
+                            </button>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <span>YouTube (watch, shorts), Vimeo yoki MP4 fayl</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -854,7 +937,20 @@ const BlockDetails = () => {
 
               <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end space-x-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium hover:bg-gray-200 transition">Bekor qilish</button>
-                <button type="submit" className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-600/20 transition">{editingTopic ? "Saqlash" : "Mavzuni yaratish"}</button>
+                <button 
+                  type="submit" 
+                  disabled={isUploadingVideo}
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-600/20 transition flex items-center gap-2"
+                >
+                  {isUploadingVideo ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin"></i>
+                      <span>Fayl yuklanmoqda...</span>
+                    </>
+                  ) : (
+                    <span>{editingTopic ? "Saqlash" : "Mavzuni yaratish"}</span>
+                  )}
+                </button>
               </div>
             </form>
           </div>
