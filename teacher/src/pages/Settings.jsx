@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { ThemeContext } from '../context/ThemeContext';
 import { API_URL, apiFetch } from '../api';
+import defaultLogo from '../assets/logo_qec_school.webp';
 
 const Settings = () => {
   const { theme, toggleTheme } = useContext(ThemeContext);
@@ -154,12 +155,16 @@ const Settings = () => {
         <div className="space-y-3 pb-4 border-b border-gray-100 dark:border-gray-700">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Platforma logotipi (Rasm havolasi URL)</label>
           <div className="flex items-center space-x-4">
-            <img className="w-12 h-12 rounded-xl object-cover border border-indigo-500 bg-indigo-50 p-1" src={profile.logo_url} alt="Logo Preview" />
+            <img 
+              className="w-12 h-12 rounded-xl object-contain border border-indigo-500 bg-white p-1" 
+              src={(profile.logo_url && !profile.logo_url.includes('text=EM')) ? profile.logo_url : defaultLogo} 
+              alt="Logo Preview" 
+            />
             <input 
               type="text" 
               value={profile.logo_url}
               onChange={(e) => setProfile({...profile, logo_url: e.target.value})}
-              placeholder="https://example.com/logo.png" 
+              placeholder="/uploads/logo_qec_school.webp" 
               className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
             />
             <button type="button" onClick={handleUpdateLogo} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition">Yangilash</button>

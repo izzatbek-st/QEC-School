@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../api';
+import logoImg from '../assets/logo_qec_school.webp';
 
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -54,10 +55,10 @@ const Login = ({ onLogin }) => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100 dark:border-gray-700">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-indigo-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-indigo-600/30 mb-4">
-            <i className="fa-solid fa-graduation-cap text-white text-2xl"></i>
+          <div className="w-20 h-20 rounded-2xl mx-auto flex items-center justify-center p-1 bg-white dark:bg-gray-700 shadow-lg shadow-indigo-600/10 border border-gray-100 dark:border-gray-600 mb-4">
+            <img src={logoImg} alt="QEC-School" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">EduMaster</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">QEC-School</h1>
           <p className="text-sm text-gray-500 mt-2">O'quvchi profiliga kirish</p>
         </div>
 

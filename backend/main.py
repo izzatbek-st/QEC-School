@@ -38,7 +38,7 @@ if not secret_key:
         secret_key = secrets.token_urlsafe(48)
     else:
         # Stable secret key for local development to prevent session loss on restart/reload
-        secret_key = "edumaster_secure_local_dev_secret_key_fixed_2026_qec"
+        secret_key = "qec_school_secure_local_dev_secret_key_fixed_2026"
 elif len(secret_key) < 32:
     raise RuntimeError("APP_SECRET_KEY must contain at least 32 characters")
 
@@ -86,7 +86,7 @@ class SinglePageApplication(StaticFiles):
             raise exc
 
 app = FastAPI(
-    title="EduMaster API",
+    title="QEC-School API",
     docs_url=None if production else "/docs",
     redoc_url=None if production else "/redoc",
 )
@@ -724,13 +724,16 @@ def init_db(db: Session):
     if not settings:
         default_settings = models.Settings(
             name="Jasur O'qituvchi",
-            email="jasur@edumaster.uz",
+            email="jasur@qecschool.uz",
             password="admin", # Default password for teacher
             avatar_url="https://placehold.co/100x100/6366f1/ffffff?text=Teacher",
-            logo_url="https://placehold.co/100x100/6366f1/ffffff?text=EM",
+            logo_url="/uploads/logo_qec_school.webp",
             theme="light"
         )
         db.add(default_settings)
+        db.commit()
+    elif settings and ("text=EM" in (settings.logo_url or "") or not settings.logo_url):
+        settings.logo_url = "/uploads/logo_qec_school.webp"
         db.commit()
 
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import logoImg from '../assets/logo_qec_school.webp';
 
 const Sidebar = ({ isOpen, closeSidebar, onLogout }) => {
   return (
@@ -11,11 +12,13 @@ const Sidebar = ({ isOpen, closeSidebar, onLogout }) => {
       <div className="flex flex-col h-full">
         <div className="flex items-center justify-between px-2 mb-6">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shadow-sm border border-indigo-400">
-              <i className="fa-solid fa-graduation-cap text-white text-xl"></i>
-            </div>
+            <img 
+              src={logoImg} 
+              alt="QEC-School" 
+              className="w-10 h-10 rounded-xl object-contain bg-white p-0.5 shadow-sm border border-indigo-400/40" 
+            />
             <div className="flex flex-col">
-              <span className="text-xl font-bold tracking-wide">EduMaster</span>
+              <span className="text-xl font-bold tracking-wide">QEC-School</span>
               <span className="text-[10px] text-indigo-300 uppercase tracking-wider">O'quvchi Paneli</span>
             </div>
           </div>

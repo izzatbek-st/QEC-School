@@ -15,10 +15,10 @@ class Settings(Base):
     __tablename__ = "settings"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, default="Jasur O'qituvchi")
-    email = Column(String, default="jasur@edumaster.uz")
+    email = Column(String, default="jasur@qecschool.uz")
     password = Column(String, nullable=False, default="")
     avatar_url = Column(String, default="https://placehold.co/100x100/6366f1/ffffff?text=Teacher")
-    logo_url = Column(String, default="https://placehold.co/100x100/6366f1/ffffff?text=EM")
+    logo_url = Column(String, default="/uploads/logo_qec_school.webp")
     theme = Column(String, default="light")
 
 class Block(Base):

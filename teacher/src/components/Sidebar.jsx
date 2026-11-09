@@ -1,16 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { API_URL, apiFetch } from '../api';
+import defaultLogo from '../assets/logo_qec_school.webp';
 
 const Sidebar = ({ isOpen, closeSidebar, onLogout }) => {
-  const [profile, setProfile] = useState({ name: "Jasur O'qituvchi", logo_url: "https://placehold.co/100x100/6366f1/ffffff?text=EM", avatar_url: "https://placehold.co/100x100/6366f1/ffffff?text=Teacher" });
+  const [profile, setProfile] = useState({ name: "Jasur O'qituvchi", logo_url: defaultLogo, avatar_url: "https://placehold.co/100x100/6366f1/ffffff?text=Teacher" });
 
   useEffect(() => {
     apiFetch(`${API_URL}/settings`)
       .then(res => res.json())
-      .then(data => setProfile(data))
+      .then(data => {
+        if (data) {
+          setProfile(prev => ({
+            ...prev,
+            ...data,
+            logo_url: (data.logo_url && !data.logo_url.includes('text=EM')) ? data.logo_url : defaultLogo
+          }));
+        }
+      })
       .catch(console.error);
   }, []);
+
+  const currentLogo = (profile.logo_url && !profile.logo_url.includes('text=EM')) ? profile.logo_url : defaultLogo;
 
   return (
     <aside 
@@ -21,9 +32,13 @@ const Sidebar = ({ isOpen, closeSidebar, onLogout }) => {
       <div>
         <div className="flex items-center justify-between px-2 mb-6">
           <div className="flex items-center space-x-3">
-            <img className="w-10 h-10 rounded-xl object-cover bg-indigo-500 p-1 shadow-sm border border-indigo-400" src={profile.logo_url} alt="Logo" />
+            <img 
+              className="w-10 h-10 rounded-xl object-contain bg-white p-0.5 shadow-sm border border-indigo-400/40" 
+              src={currentLogo} 
+              alt="QEC-School" 
+            />
             <div className="flex flex-col">
-              <span className="text-xl font-bold tracking-wide">EduMaster</span>
+              <span className="text-xl font-bold tracking-wide">QEC-School</span>
               <span className="text-[10px] text-indigo-300 uppercase tracking-wider">O'qituvchi Paneli</span>
             </div>
           </div>
