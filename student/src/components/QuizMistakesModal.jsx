@@ -456,7 +456,7 @@ const QuizMistakesModal = ({ isOpen, onClose, attempt }) => {
                             </span>
                             {!field.is_correct && (
                               <span className="text-xs text-emerald-600 block font-bold">
-                                To'g'risi: {field.correct}
+                                To'g'risi: {field.correct || field.correct_answer}
                               </span>
                             )}
                           </div>

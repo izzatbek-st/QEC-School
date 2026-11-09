@@ -71,7 +71,9 @@ def _normalise_question(question: dict) -> dict:
             result["text"] = text
         question_type = "drag_words" if question_type == "drag_words" else "fill_blanks"
     elif question_type == "dropdown":
-        for field in result.get("fields", []):
+        for f_idx, field in enumerate(result.get("fields", [])):
+            if not field.get("id"):
+                field["id"] = str(f_idx + 1)
             if "correct" not in field:
                 field["correct"] = field.get("correct_answer", "")
             options = field.get("options", "")
@@ -280,11 +282,15 @@ def grade_question(
 
     if question_type == "dropdown":
         fields = question.get("fields", [])
-        return bool(fields) and isinstance(answer, dict) and all(
-            _normalise_text(answer.get(str(field["id"]), answer.get(field["id"])))
-            == _normalise_text(field.get("correct", field.get("correct_answer")))
-            for field in fields
-        )
+        if not fields or not isinstance(answer, dict):
+            return False
+        for field in fields:
+            fid = str(field.get("id"))
+            correct_val = _normalise_text(field.get("correct", field.get("correct_answer")))
+            student_val = _normalise_text(answer.get(fid, answer.get(field.get("id"))))
+            if not student_val or student_val != correct_val:
+                return False
+        return True
 
     if question_type == "hotspot":
         if not isinstance(answer, dict) or answer.get("x") is None or answer.get("y") is None:
@@ -397,15 +403,17 @@ def grade_quiz(
             ans_dict = answer if isinstance(answer, dict) else {}
             for field in question.get("fields", []):
                 fid = str(field.get("id"))
-                correct_val = str(field.get("correct", field.get("correct_answer", "")))
-                student_val = str(ans_dict.get(fid, ans_dict.get(field.get("id"), "")))
+                correct_val = str(field.get("correct", field.get("correct_answer", ""))).strip()
+                student_raw = ans_dict.get(fid, ans_dict.get(field.get("id"), ""))
+                student_val = str(student_raw).strip() if student_raw is not None else ""
+                is_field_correct = _normalise_text(student_val) == _normalise_text(correct_val) and bool(correct_val)
                 fields_detail.append({
                     "id": field.get("id"),
                     "label": field.get("label", ""),
                     "options": field.get("options", ""),
                     "correct": correct_val,
                     "student_value": student_val,
-                    "is_correct": _normalise_text(student_val) == _normalise_text(correct_val)
+                    "is_correct": is_field_correct
                 })
             result_question["fields"] = fields_detail
 

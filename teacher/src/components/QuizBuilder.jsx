@@ -66,6 +66,7 @@ const QuizBuilder = ({ quizData, setQuizData }) => {
       };
     } else if (type === 'dropdown') {
       specificFields = {
+        question: "Quyidagi ro'yxatdan mos variantlarni tanlang:",
         fields: [
           { id: Date.now() + 1, label: 'Operatsion tizim', options: 'Windows, Linux, MacOS', correct: 'Windows' }
         ]
@@ -143,8 +144,11 @@ const QuizBuilder = ({ quizData, setQuizData }) => {
   // Specific helpers
   const updateArrItem = (qId, arrName, itemId, field, value) => {
       setQuizData(quizData.map(q => {
-          if (q.id === qId) {
-              return { ...q, [arrName]: (q[arrName]||[]).map(item => item.id === itemId ? { ...item, [field]: value } : item) };
+          if (String(q.id) === String(qId)) {
+              return { 
+                ...q, 
+                [arrName]: (q[arrName]||[]).map(item => String(item.id) === String(itemId) ? { ...item, [field]: value } : item) 
+              };
           }
           return q;
       }));
@@ -152,7 +156,7 @@ const QuizBuilder = ({ quizData, setQuizData }) => {
 
   const addArrItem = (qId, arrName, newItem) => {
       setQuizData(quizData.map(q => {
-          if (q.id === qId) {
+          if (String(q.id) === String(qId)) {
               return { ...q, [arrName]: [...(q[arrName]||[]), newItem] };
           }
           return q;
@@ -161,8 +165,8 @@ const QuizBuilder = ({ quizData, setQuizData }) => {
 
   const removeArrItem = (qId, arrName, itemId) => {
       setQuizData(quizData.map(q => {
-          if (q.id === qId) {
-              return { ...q, [arrName]: (q[arrName]||[]).filter(item => item.id !== itemId) };
+          if (String(q.id) === String(qId)) {
+              return { ...q, [arrName]: (q[arrName]||[]).filter(item => String(item.id) !== String(itemId)) };
           }
           return q;
       }));
@@ -333,21 +337,132 @@ const QuizBuilder = ({ quizData, setQuizData }) => {
         )}
 
         {q.type === 'dropdown' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Dropdown maydonlari</label>
-              <div className="space-y-4">
-                {(q.fields || []).map((field, idx) => (
-                    <div key={field.id} className="p-3 border rounded-xl bg-white dark:bg-gray-800 dark:border-gray-600 space-y-3">
-                        <div className="flex gap-2">
-                           <input type="text" placeholder="Maydon nomi (Label)" value={field.label} onChange={e => updateArrItem(q.id, 'fields', field.id, 'label', e.target.value)} className="flex-1 px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-500" required />
-                           <button type="button" onClick={() => removeArrItem(q.id, 'fields', field.id)} className="text-red-500 px-2"><i className="fa-solid fa-trash"></i></button>
-                        </div>
-                        <input type="text" placeholder="Variantlar (vergul bilan ajrating, misol: Windows, Linux, MacOS)" value={field.options} onChange={e => updateArrItem(q.id, 'fields', field.id, 'options', e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-500" required />
-                        <input type="text" placeholder="To'g'ri javob matni (variantlardan biri bilan mos tushishi shart)" value={field.correct} onChange={e => updateArrItem(q.id, 'fields', field.id, 'correct', e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800" required />
-                    </div>
-                ))}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm font-bold text-gray-800 dark:text-gray-200">
+                    Dropdown maydonlari (Ro'yxatdan tanlash)
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Har bir maydon uchun nom, variantlar (vergul bilan) va to'g'ri javobni belgilang.
+                  </p>
+                </div>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400">
+                  {(q.fields || []).length} ta maydon
+                </span>
               </div>
-              <button type="button" onClick={() => addArrItem(q.id, 'fields', {id: Date.now(), label: '', options: '', correct: ''})} className="mt-3 text-indigo-600 text-sm hover:underline"><i className="fa-solid fa-plus"></i> Maydon qo'shish</button>
+
+              <div className="space-y-4">
+                {(q.fields || []).map((field, idx) => {
+                  const parsedOptions = String(field.options || '')
+                    .split(',')
+                    .map(o => o.trim())
+                    .filter(Boolean);
+
+                  return (
+                    <div key={field.id} className="p-4 border rounded-2xl bg-gray-50/70 dark:bg-gray-800/80 dark:border-gray-700 space-y-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-700/60 pb-2">
+                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          {idx + 1}-maydon
+                        </span>
+                        {(q.fields || []).length > 1 && (
+                          <button 
+                            type="button" 
+                            onClick={() => removeArrItem(q.id, 'fields', field.id)} 
+                            className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-semibold"
+                            title="Ushbu maydonni o'chirish"
+                          >
+                            <i className="fa-solid fa-trash-can"></i>
+                            <span>O'chirish</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* 1. Field Label */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Maydon / Savol nomi (Label):
+                        </label>
+                        <input 
+                          type="text" 
+                          placeholder="Masalan: Operatsion tizim" 
+                          value={field.label || ''} 
+                          onChange={e => updateArrItem(q.id, 'fields', field.id, 'label', e.target.value)} 
+                          className="w-full px-3.5 py-2.5 border rounded-xl text-sm bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                          required 
+                        />
+                      </div>
+
+                      {/* 2. Options list */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Variantlar ro'yxati (vergul bilan ajrating):
+                        </label>
+                        <input 
+                          type="text" 
+                          placeholder="Masalan: Windows, Linux, MacOS" 
+                          value={field.options || ''} 
+                          onChange={e => updateArrItem(q.id, 'fields', field.id, 'options', e.target.value)} 
+                          className="w-full px-3.5 py-2.5 border rounded-xl text-sm bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                          required 
+                        />
+                      </div>
+
+                      {/* 3. Correct answer with smart select & custom input */}
+                      <div>
+                        <label className="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1 flex items-center justify-between">
+                          <span>To'g'ri javob:</span>
+                          {parsedOptions.length > 0 && (
+                            <span className="text-[11px] font-normal text-gray-500">
+                              Variantlardan birini tanlang
+                            </span>
+                          )}
+                        </label>
+                        {parsedOptions.length > 0 ? (
+                          <div className="flex gap-2">
+                            <select
+                              value={field.correct || ''}
+                              onChange={e => updateArrItem(q.id, 'fields', field.id, 'correct', e.target.value)}
+                              className="flex-1 px-3.5 py-2.5 border rounded-xl text-sm font-semibold bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                              required
+                            >
+                              <option value="">— To'g'ri javobni tanlang —</option>
+                              {parsedOptions.map((opt, oIdx) => (
+                                <option key={oIdx} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              placeholder="Yoki qo'lda yozing"
+                              value={field.correct || ''}
+                              onChange={e => updateArrItem(q.id, 'fields', field.id, 'correct', e.target.value)}
+                              className="w-1/3 px-3 py-2 border rounded-xl text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        ) : (
+                          <input 
+                            type="text" 
+                            placeholder="To'g'ri javob matni" 
+                            value={field.correct || ''} 
+                            onChange={e => updateArrItem(q.id, 'fields', field.id, 'correct', e.target.value)} 
+                            className="w-full px-3.5 py-2.5 border rounded-xl text-sm font-semibold bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none" 
+                            required 
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button 
+                type="button" 
+                onClick={() => addArrItem(q.id, 'fields', { id: Date.now(), label: '', options: '', correct: '' })} 
+                className="mt-2 px-4 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-xs font-bold transition flex items-center gap-2"
+              >
+                <i className="fa-solid fa-plus"></i>
+                <span>Yangi maydon qo'shish</span>
+              </button>
             </div>
         )}
 

@@ -252,8 +252,12 @@ const BlockDetails = () => {
     for (let i = 0; i < quizData.length; i++) {
        const q = quizData[i];
        if (!q.question || !q.question.trim()) {
-           alert(`${i + 1}-savol matnini kiriting!`);
-           return;
+           if (q.type === 'dropdown') {
+               q.question = "Quyidagi ro'yxatdan mos variantlarni tanlang:";
+           } else {
+               alert(`${i + 1}-savol matnini kiriting!`);
+               return;
+           }
        }
        const type = q.type || (q.isMultiSelect ? 'multiple_choice' : 'single_choice');
        if (type === 'single_choice' || type === 'multiple_choice') {
@@ -265,6 +269,27 @@ const BlockDetails = () => {
            if (options.some(opt => !opt.text || !opt.text.trim())) {
              alert(`${i + 1}-savolning barcha variantlar matnini kiriting yoki bo'sh variantlarni o'chirib tashlang!`);
              return;
+           }
+       } else if (type === 'dropdown') {
+           const fields = Array.isArray(q.fields) ? q.fields : [];
+           if (fields.length === 0) {
+             alert(`${i + 1}-savol uchun kamida bitta dropdown maydoni qo'shing!`);
+             return;
+           }
+           for (let fIdx = 0; fIdx < fields.length; fIdx++) {
+             const f = fields[fIdx];
+             if (!f.label || !f.label.trim()) {
+               alert(`${i + 1}-savolning ${fIdx + 1}-maydoni nomini (Label) kiriting!`);
+               return;
+             }
+             if (!f.options || !String(f.options).trim()) {
+               alert(`${i + 1}-savolning «${f.label}» maydoni uchun variantlarni kiriting!`);
+               return;
+             }
+             if (!f.correct || !String(f.correct).trim()) {
+               alert(`${i + 1}-savolning «${f.label}» maydoni uchun to'g'ri javobni tanlang yoki kiriting!`);
+               return;
+             }
            }
        }
     }
@@ -320,12 +345,23 @@ const BlockDetails = () => {
             options: parsed?.options || []
           }];
         } else {
-          parsed = parsed.map((q, idx) => ({
-            ...q,
-            id: q.id || (Date.now() + idx).toString(),
-            type: q.type || (q.isMultiSelect ? 'multiple_choice' : 'single_choice'),
-            options: Array.isArray(q.options) ? q.options : (['single_choice', 'multiple_choice'].includes(q.type) ? [] : undefined)
-          }));
+          parsed = parsed.map((q, idx) => {
+            const mapped = {
+              ...q,
+              id: q.id || (Date.now() + idx).toString(),
+              type: q.type || (q.isMultiSelect ? 'multiple_choice' : 'single_choice'),
+              options: Array.isArray(q.options) ? q.options : (['single_choice', 'multiple_choice'].includes(q.type) ? [] : undefined)
+            };
+            if (mapped.type === 'dropdown' && Array.isArray(mapped.fields)) {
+              mapped.fields = mapped.fields.map((f, fIdx) => ({
+                ...f,
+                id: f.id || (Date.now() + fIdx + 1),
+                correct: f.correct || f.correct_answer || '',
+                options: Array.isArray(f.options) ? f.options.join(', ') : (f.options || '')
+              }));
+            }
+            return mapped;
+          });
         }
         setQuizData(parsed);
       } catch (e) {
@@ -691,6 +727,26 @@ const BlockDetails = () => {
                                   <div key={idx} className="p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2">
                                     <span className="font-bold text-indigo-600">{idx + 1}.</span>
                                     <span className="text-gray-700 dark:text-gray-300">{item.text}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Dropdown preview */}
+                            {type === 'dropdown' && Array.isArray(q.fields) && (
+                              <div className="space-y-2 mt-2">
+                                {q.fields.map((f, fIdx) => (
+                                  <div key={f.id || fIdx} className="p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div>
+                                      <span className="font-bold text-gray-800 dark:text-gray-200">{f.label || `Maydon #${fIdx + 1}`}:</span>
+                                      <span className="text-gray-400 ml-2">[{Array.isArray(f.options) ? f.options.join(', ') : f.options}]</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 self-start sm:self-center">
+                                      <span className="text-gray-500 font-medium">To'g'ri:</span>
+                                      <span className="px-2 py-0.5 rounded-md font-bold bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                                        {f.correct || f.correct_answer || '—'}
+                                      </span>
+                                    </div>
                                   </div>
                                 ))}
                               </div>

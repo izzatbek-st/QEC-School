@@ -43,7 +43,10 @@ const QuizViewer = ({ qDataList, topicId, initialAttempt = null, isCompleted = f
   const answeredCount = Object.keys(answers).filter(k => {
     const val = answers[k];
     if (val === undefined || val === null || val === '') return false;
-    if (typeof val === 'object' && Object.keys(val).length === 0) return false;
+    if (typeof val === 'object') {
+      const values = Object.values(val);
+      if (values.length === 0 || values.every(v => v === '' || v === null || v === undefined)) return false;
+    }
     return true;
   }).length;
   const unansweredCount = Math.max(0, totalQuestionsCount - answeredCount);
@@ -660,28 +663,36 @@ const QuizViewer = ({ qDataList, topicId, initialAttempt = null, isCompleted = f
                 {type === 'dropdown' && (
                   <div className="space-y-3">
                     {(q.fields || []).map(f => {
-                      const selectedVal = (ans || {})[f.id] || f.student_value || '';
+                      const selectedVal = (ans || {})[f.id] ?? (ans || {})[String(f.id)] ?? f.student_value ?? '';
+                      const optList = Array.isArray(f.options)
+                        ? f.options.map(o => String(o).trim())
+                        : String(f.options || '').split(',').map(o => o.trim()).filter(Boolean);
+
                       return (
-                        <div key={f.id} className="p-3 rounded-xl border bg-gray-50 dark:bg-gray-800 flex items-center justify-between gap-3">
-                          <span className="font-medium text-gray-800 dark:text-gray-200">{f.label || `Maydon #${f.id}`}:</span>
+                        <div key={f.id} className="p-3.5 sm:p-4 rounded-2xl border bg-gray-50/80 dark:bg-gray-800/80 border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                            {f.label || `Maydon #${f.id}`}:
+                          </span>
                           {showResult ? (
-                            <div className="text-right">
-                              <span className={`font-semibold ${f.is_correct ? 'text-emerald-600' : 'text-rose-600 line-through'}`}>
-                                {selectedVal || '(Tanlanmagan)'}
+                            <div className="text-left sm:text-right">
+                              <span className={`font-bold text-sm ${f.is_correct ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400 line-through'}`}>
+                                {selectedVal || "(Tanlanmagan)"}
                               </span>
                               {!f.is_correct && (
-                                <span className="text-xs text-emerald-600 block font-bold">To'g'risi: {f.correct}</span>
+                                <span className="text-xs text-emerald-600 dark:text-emerald-400 block font-bold mt-0.5">
+                                  To'g'risi: {f.correct || f.correct_answer}
+                                </span>
                               )}
                             </div>
                           ) : (
                             <select 
                               value={selectedVal} 
                               onChange={e => handleNestedAnswerChange(q.id, f.id, e.target.value)} 
-                              className="p-2 border rounded-lg bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                              className="px-3.5 py-2 border rounded-xl bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-sm text-gray-800 dark:text-gray-100 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none min-w-[180px]"
                             >
-                              <option value="">Tanlang...</option>
-                              {String(f.options || '').split(',').map((opt, oIdx) => (
-                                <option key={oIdx} value={opt.trim()}>{opt.trim()}</option>
+                              <option value="">— Variantni tanlang —</option>
+                              {optList.map((opt, oIdx) => (
+                                <option key={oIdx} value={opt}>{opt}</option>
                               ))}
                             </select>
                           )}
