@@ -7,7 +7,6 @@ import Results from './pages/Results';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import LessonViewer from './pages/LessonViewer';
-import AppSplashScreen from './components/AppSplashScreen';
 
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -19,7 +18,6 @@ const ProtectedRoute = ({ children, user }) => {
 };
 
 function App() {
-  const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem('student_user');
@@ -55,15 +53,8 @@ function App() {
   };
 
   return (
-    <>
-      {showSplash && (
-        <AppSplashScreen 
-          title="O'quvchi Paneli" 
-          onFinish={() => setShowSplash(false)} 
-        />
-      )}
-      <ErrorBoundary>
-        <Routes>
+    <ErrorBoundary>
+      <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} />
 
         <Route path="/" element={<ProtectedRoute user={user}><MainLayout onLogout={handleLogout} /></ProtectedRoute>}>
@@ -75,7 +66,6 @@ function App() {
         </Route>
       </Routes>
     </ErrorBoundary>
-    </>
   );
 }
 

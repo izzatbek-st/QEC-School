@@ -24,7 +24,7 @@
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png" />
   <link rel="icon" type="image/webp" href="./logo_qec_school.webp" />
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
-  <meta name="theme-color" content="#0f172a" />
+  <meta name="theme-color" content="#4f46e5" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -38,128 +38,7 @@
 </head>
 
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 antialiased transition-colors duration-200">
-  <div id="root">
-    <div id="qec-splash">
-      <style>
-        #qec-splash {
-          position: fixed;
-          inset: 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: #020617;
-          background: radial-gradient(circle at 50% 35%, #1e1b4b 0%, #0f172a 55%, #020617 100%);
-          z-index: 99999;
-          font-family: 'Inter', system-ui, -apple-system, sans-serif;
-          user-select: none;
-          -webkit-user-select: none;
-          color: #f8fafc;
-        }
-        @keyframes qecPulse {
-          0%, 100% { transform: scale(1); filter: drop-shadow(0 0 25px rgba(99, 102, 241, 0.4)); }
-          50% { transform: scale(1.04); filter: drop-shadow(0 0 40px rgba(168, 85, 247, 0.6)); }
-        }
-        @keyframes qecPing {
-          0% { transform: scale(0.85); opacity: 0.8; }
-          100% { transform: scale(1.6); opacity: 0; }
-        }
-        @keyframes qecShimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(200%); }
-        }
-        @keyframes qecFadeText {
-          0%, 100% { opacity: 0.6; }
-          50% { opacity: 1; }
-        }
-        .qec-ring {
-          position: absolute;
-          width: 120px;
-          height: 120px;
-          border-radius: 32px;
-          background: radial-gradient(circle, rgba(129, 140, 248, 0.35) 0%, rgba(99, 102, 241, 0) 70%);
-          animation: qecPing 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
-        }
-        .qec-logo-box {
-          position: relative;
-          width: 96px;
-          height: 96px;
-          border-radius: 26px;
-          background: rgba(30, 41, 59, 0.75);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 10px;
-          box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 35px rgba(99, 102, 241, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          animation: qecPulse 2.4s ease-in-out infinite;
-          box-sizing: border-box;
-        }
-        .qec-logo-box img {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          border-radius: 18px;
-        }
-        .qec-brand-title {
-          margin: 22px 0 6px 0;
-          font-size: 24px;
-          font-weight: 800;
-          letter-spacing: -0.5px;
-          color: #ffffff;
-          background: linear-gradient(135deg, #ffffff 40%, #c7d2fe 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .qec-brand-sub {
-          margin: 0;
-          font-size: 13px;
-          font-weight: 600;
-          color: #818cf8;
-          letter-spacing: 0.5px;
-          text-transform: uppercase;
-        }
-        .qec-loader-bar {
-          width: 140px;
-          height: 5px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 99px;
-          overflow: hidden;
-          position: relative;
-          margin-top: 24px;
-        }
-        .qec-loader-inner {
-          position: absolute;
-          inset: 0;
-          width: 50%;
-          background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
-          border-radius: 99px;
-          animation: qecShimmer 1.4s ease-in-out infinite;
-        }
-        .qec-loader-hint {
-          margin-top: 12px;
-          font-size: 12px;
-          font-weight: 500;
-          color: #94a3b8;
-          animation: qecFadeText 1.8s ease-in-out infinite;
-        }
-      </style>
-      <div style="position:relative;display:flex;align-items:center;justify-content:center;">
-        <div class="qec-ring"></div>
-        <div class="qec-logo-box">
-          <img src="./pwa-192x192.png" alt="QEC-School" />
-        </div>
-      </div>
-      <h1 class="qec-brand-title">QEC-School</h1>
-      <p class="qec-brand-sub">O'quvchi paneli</p>
-      <div class="qec-loader-bar">
-        <div class="qec-loader-inner"></div>
-      </div>
-      <span class="qec-loader-hint">Yuklanmoqda...</span>
-    </div>
-  </div>
+  <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 
