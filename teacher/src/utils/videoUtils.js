@@ -9,7 +9,10 @@ export function getVideoMeta(rawUrl) {
   let url = rawUrl.trim();
   if (!url) return null;
 
-  // 1. If teacher pasted an iframe snippet (<iframe ... src="..."), extract src
+  // 1. If URL points to localhost or 127.0.0.1 /uploads/..., strip origin so it loads from current origin
+  url = url.replace(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/uploads\/.*)/i, '$1');
+
+  // 2. If teacher pasted an iframe snippet (<iframe ... src="..."), extract src
   if (url.includes('<iframe')) {
     const srcMatch = url.match(/src=["']([^"']+)["']/i);
     if (srcMatch && srcMatch[1]) {
@@ -17,9 +20,9 @@ export function getVideoMeta(rawUrl) {
     }
   }
 
-  // 2. YouTube matching (watch?v=, youtu.be/, shorts/, embed/, mobile)
+  // 3. YouTube matching (watch?v=, youtu.be/, shorts/, embed/, live/, mobile)
   const ytMatch = url.match(
-    /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/)|youtu\.be\/)([\w-]{11})/i
+    /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([\w-]{11})/i
   );
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1];
@@ -41,9 +44,21 @@ export function getVideoMeta(rawUrl) {
     };
   }
 
-  // 3. Vimeo matching
+  // 4. Google Drive video matching (drive.google.com/file/d/... or open?id=...)
+  const gdriveMatch = url.match(
+    /(?:https?:\/\/)?drive\.google\.com\/(?:file\/d\/([a-zA-Z0-9_-]+)|open\?id=([a-zA-Z0-9_-]+))/i
+  );
+  if (gdriveMatch) {
+    const fileId = gdriveMatch[1] || gdriveMatch[2];
+    return {
+      type: 'iframe',
+      embedUrl: `https://drive.google.com/file/d/${fileId}/preview`
+    };
+  }
+
+  // 5. Vimeo matching
   const vimeoMatch = url.match(
-    /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(?:\d+)\/video\/|video\/|)(\d+)/i
+    /(?:https?:\/\/)?(?:www\.)?(?:player\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(?:\d+)\/video\/|video\/|)(\d+)/i
   );
   if (vimeoMatch && vimeoMatch[2]) {
     return {
@@ -53,7 +68,7 @@ export function getVideoMeta(rawUrl) {
     };
   }
 
-  // 4. Direct video file (local uploads /uploads/... or external mp4/webm/ogg)
+  // 6. Direct video file (local uploads /uploads/... or external mp4/webm/ogg)
   return {
     type: 'direct',
     embedUrl: url
@@ -65,7 +80,11 @@ export function getVideoMeta(rawUrl) {
  */
 export function sanitizeLessonHtml(dirtyHtml) {
   if (!dirtyHtml) return '';
-  return DOMPurify.sanitize(dirtyHtml, {
+  const normalizedHtml = dirtyHtml.replace(
+    /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/uploads\/[^\s"'>]+)/gi,
+    '$1'
+  );
+  return DOMPurify.sanitize(normalizedHtml, {
     ADD_TAGS: ['iframe', 'video', 'source'],
     ADD_ATTR: [
       'allow',

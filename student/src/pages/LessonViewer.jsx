@@ -242,7 +242,7 @@ const LessonViewer = () => {
               {/* Video Player */}
               {videoMeta && (
                 <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden mb-8 shadow-2xl relative border border-gray-200 dark:border-gray-800">
-                  {videoMeta.type === 'youtube' || videoMeta.type === 'vimeo' ? (
+                  {videoMeta.type === 'youtube' || videoMeta.type === 'vimeo' || videoMeta.type === 'iframe' ? (
                     <iframe 
                       src={videoMeta.embedUrl} 
                       className="w-full h-full absolute top-0 left-0 border-0" 
@@ -254,6 +254,7 @@ const LessonViewer = () => {
                   ) : (
                     <video 
                       key={videoMeta.embedUrl}
+                      src={videoMeta.embedUrl}
                       controls 
                       playsInline
                       preload="metadata"

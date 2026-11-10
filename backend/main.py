@@ -313,6 +313,14 @@ def authorize_block(block: models.Block, current_user: dict, db: Session) -> Non
         raise HTTPException(status_code=403, detail="Bu dars blokiga ruxsat yo'q")
 
 
+def sanitize_stored_media_url(url: str | None) -> str | None:
+    if not url:
+        return url
+    clean = url.strip()
+    clean = re.sub(r"^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/uploads/.*)", r"\1", clean)
+    return clean
+
+
 def student_topic_payload(
     topic: models.Topic,
     student_id: int,
@@ -321,12 +329,17 @@ def student_topic_payload(
     is_lesson_completed: bool = False,
 ) -> dict:
     passing_score = topic.passing_score if topic.passing_score is not None else 70
+    clean_video_url = sanitize_stored_media_url(topic.video_url)
+    clean_content = topic.content
+    if clean_content:
+        clean_content = re.sub(r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/uploads/[^\s\"'>]+)", r"\1", clean_content)
+
     payload = {
         "id": topic.id,
         "block_id": topic.block_id,
         "title": topic.title,
-        "video_url": topic.video_url,
-        "content": topic.content,
+        "video_url": clean_video_url,
+        "content": clean_content,
         "order_index": topic.order_index,
         "item_type": topic.item_type,
         "quiz_data": topic.quiz_data,
@@ -411,9 +424,13 @@ def seed_from_template_if_empty(db: Session):
         # 2. Topics
         cur.execute("SELECT id, block_id, title, video_url, content, order_index, item_type, quiz_data FROM topics")
         for row in cur.fetchall():
+            clean_seed_video = sanitize_stored_media_url(row[3])
+            clean_seed_content = row[4]
+            if clean_seed_content:
+                clean_seed_content = re.sub(r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/uploads/[^\s\"'>]+)", r"\1", clean_seed_content)
             db.add(models.Topic(
-                id=row[0], block_id=row[1], title=row[2], video_url=row[3],
-                content=row[4], order_index=row[5], item_type=row[6], quiz_data=row[7]
+                id=row[0], block_id=row[1], title=row[2], video_url=clean_seed_video,
+                content=clean_seed_content, order_index=row[5], item_type=row[6], quiz_data=row[7]
             ))
         db.commit()
 
@@ -717,6 +734,28 @@ def migrate_student_scores(db: Session):
         print("migrate_student_scores notice:", e)
 
 
+def normalize_stored_video_urls(db: Session):
+    try:
+        topics = db.query(models.Topic).all()
+        updated_count = 0
+        for t in topics:
+            if t.video_url and ("localhost" in t.video_url or "127.0.0.1" in t.video_url):
+                new_url = sanitize_stored_media_url(t.video_url)
+                if new_url != t.video_url:
+                    t.video_url = new_url
+                    updated_count += 1
+            if t.content and ("localhost" in t.content or "127.0.0.1" in t.content):
+                new_content = re.sub(r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/uploads/[^\s\"'>]+)", r"\1", t.content)
+                if new_content != t.content:
+                    t.content = new_content
+                    updated_count += 1
+        if updated_count > 0:
+            db.commit()
+            print(f"[MIGRATION] Successfully normalized {updated_count} topic video/content URLs.")
+    except Exception as e:
+        print("[MIGRATION] Error normalizing video URLs:", e)
+
+
 def init_db(db: Session):
     models.Base.metadata.create_all(bind=engine)
     ensure_quiz_attempts_columns()
@@ -747,6 +786,7 @@ def startup_event():
             try:
                 init_db(db)
                 seed_from_template_if_empty(db)
+                normalize_stored_video_urls(db)
                 migrate_student_scores(db)
                 settings = db.query(models.Settings).first()
                 if settings and not settings.password.startswith(PASSWORD_PREFIX):
@@ -1274,6 +1314,11 @@ def get_topics_for_block(
         models.Topic.block_id == block_id
     ).order_by(models.Topic.order_index).all()
     if current_user["role"] == "teacher":
+        for t in topics:
+            if t.video_url:
+                t.video_url = sanitize_stored_media_url(t.video_url)
+            if t.content:
+                t.content = re.sub(r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/uploads/[^\s\"'>]+)", r"\1", t.content)
         return topics
 
     student_id = current_user["sub"]
@@ -1819,8 +1864,14 @@ def create_topic(block_id: int, topic: schemas.TopicCreate, db: Session = Depend
     if not block:
         raise HTTPException(status_code=404, detail="Block not found")
     
+    topic_data = topic.dict()
+    if topic_data.get("video_url"):
+        topic_data["video_url"] = sanitize_stored_media_url(topic_data["video_url"])
+    if topic_data.get("content"):
+        topic_data["content"] = re.sub(r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/uploads/[^\s\"'>]+)", r"\1", topic_data["content"])
+
     db_topic = models.Topic(
-        **topic.dict(),
+        **topic_data,
         block_id=block_id
     )
     db.add(db_topic)
@@ -1838,7 +1889,13 @@ def update_topic(topic_id: int, topic: schemas.TopicCreate, db: Session = Depend
     if not db_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     
-    for key, value in topic.dict().items():
+    topic_data = topic.dict()
+    if topic_data.get("video_url"):
+        topic_data["video_url"] = sanitize_stored_media_url(topic_data["video_url"])
+    if topic_data.get("content"):
+        topic_data["content"] = re.sub(r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/uploads/[^\s\"'>]+)", r"\1", topic_data["content"])
+
+    for key, value in topic_data.items():
         setattr(db_topic, key, value)
         
     db.commit()

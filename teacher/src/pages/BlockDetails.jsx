@@ -66,7 +66,8 @@ const BlockDetails = () => {
     formData.append('file', file);
     setIsUploadingVideo(true);
     try {
-      const res = await apiFetch('/api/upload', {
+      const uploadEndpoint = `${API_URL.replace(/\/teacher\/?$/, '')}/upload`;
+      const res = await apiFetch(uploadEndpoint, {
         method: 'POST',
         body: formData
       });
@@ -222,7 +223,7 @@ const BlockDetails = () => {
   const handleSaveTopic = (e) => {
     e.preventDefault();
     const title = e.target.elements.title.value;
-    const cleanVideoUrl = modalVideoUrl.trim();
+    const cleanVideoUrl = modalVideoUrl.trim().replace(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/uploads\/.*)/i, '$1');
     
     const payload = {
       title,
@@ -775,11 +776,11 @@ const BlockDetails = () => {
                     return (
                       <div className="mb-4 ml-8 space-y-2">
                         <div className="inline-flex items-center space-x-2 text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-800">
-                          <i className={meta?.type === 'youtube' ? "fa-brands fa-youtube text-red-500" : "fa-solid fa-circle-play text-indigo-500"}></i>
-                          <span>{meta?.type === 'youtube' ? 'YouTube video' : meta?.type === 'vimeo' ? 'Vimeo video' : 'Video fayl'} biriktirilgan</span>
+                          <i className={meta?.type === 'youtube' ? "fa-brands fa-youtube text-red-500" : meta?.type === 'iframe' ? "fa-solid fa-cloud text-blue-500" : "fa-solid fa-circle-play text-indigo-500"}></i>
+                          <span>{meta?.type === 'youtube' ? 'YouTube video' : meta?.type === 'vimeo' ? 'Vimeo video' : meta?.type === 'iframe' ? 'Bulutli video (Google Drive)' : 'Video fayl'} biriktirilgan</span>
                         </div>
                         <div className="w-full max-w-xl aspect-video bg-black rounded-xl overflow-hidden shadow-md relative border border-gray-200 dark:border-gray-800">
-                          {meta?.type === 'youtube' || meta?.type === 'vimeo' ? (
+                          {meta?.type === 'youtube' || meta?.type === 'vimeo' || meta?.type === 'iframe' ? (
                             <iframe 
                               src={meta.embedUrl} 
                               className="w-full h-full absolute top-0 left-0 border-0" 
@@ -791,6 +792,7 @@ const BlockDetails = () => {
                           ) : (
                             <video 
                               key={meta?.embedUrl}
+                              src={meta?.embedUrl}
                               controls 
                               playsInline
                               preload="metadata"
