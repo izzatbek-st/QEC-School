@@ -9,6 +9,7 @@ import Results from './pages/Results';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import BlockDetails from './pages/BlockDetails';
+import AppSplashScreen from './components/AppSplashScreen';
 
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -20,6 +21,7 @@ const ProtectedRoute = ({ children, user }) => {
 };
 
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem('teacher_user');
@@ -55,21 +57,29 @@ function App() {
   };
 
   return (
-    <ErrorBoundary>
-      <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} />
-        
-        <Route path="/" element={<ProtectedRoute user={user}><MainLayout onLogout={handleLogout} /></ProtectedRoute>}>
-          <Route index element={<Home />} />
-          <Route path="database" element={<Database />} />
-          <Route path="database/blocks/:id" element={<BlockDetails />} />
-          <Route path="groups" element={<Groups />} />
-          <Route path="students" element={<Students />} />
-          <Route path="results" element={<Results />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-      </Routes>
-    </ErrorBoundary>
+    <>
+      {showSplash && (
+        <AppSplashScreen 
+          title="O'qituvchi Paneli" 
+          onFinish={() => setShowSplash(false)} 
+        />
+      )}
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} />
+          
+          <Route path="/" element={<ProtectedRoute user={user}><MainLayout onLogout={handleLogout} /></ProtectedRoute>}>
+            <Route index element={<Home />} />
+            <Route path="database" element={<Database />} />
+            <Route path="database/blocks/:id" element={<BlockDetails />} />
+            <Route path="groups" element={<Groups />} />
+            <Route path="students" element={<Students />} />
+            <Route path="results" element={<Results />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+        </Routes>
+      </ErrorBoundary>
+    </>
   );
 }
 

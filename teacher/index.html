@@ -23,7 +23,7 @@
     <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png" />
     <link rel="icon" type="image/webp" href="./logo_qec_school.webp" />
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="theme-color" content="#0f172a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -44,19 +44,21 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: #ffffff;
+            background: #020617;
+            background: radial-gradient(circle at 50% 35%, #1e1b4b 0%, #0f172a 55%, #020617 100%);
             z-index: 99999;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             user-select: none;
             -webkit-user-select: none;
+            color: #f8fafc;
           }
           @keyframes qecPulse {
-            0%, 100% { transform: scale(1); filter: drop-shadow(0 10px 20px rgba(79, 70, 229, 0.2)); }
-            50% { transform: scale(1.05); filter: drop-shadow(0 16px 28px rgba(79, 70, 229, 0.35)); }
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 25px rgba(99, 102, 241, 0.4)); }
+            50% { transform: scale(1.04); filter: drop-shadow(0 0 40px rgba(168, 85, 247, 0.6)); }
           }
           @keyframes qecPing {
             0% { transform: scale(0.85); opacity: 0.8; }
-            100% { transform: scale(1.5); opacity: 0; }
+            100% { transform: scale(1.6); opacity: 0; }
           }
           @keyframes qecShimmer {
             0% { transform: translateX(-100%); }
@@ -68,24 +70,26 @@
           }
           .qec-ring {
             position: absolute;
-            width: 110px;
-            height: 110px;
-            border-radius: 28px;
-            background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0) 70%);
-            animation: qecPing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+            width: 120px;
+            height: 120px;
+            border-radius: 32px;
+            background: radial-gradient(circle, rgba(129, 140, 248, 0.35) 0%, rgba(99, 102, 241, 0) 70%);
+            animation: qecPing 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
           }
           .qec-logo-box {
             position: relative;
             width: 96px;
             height: 96px;
-            border-radius: 24px;
-            background: #ffffff;
+            border-radius: 26px;
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 8px;
-            box-shadow: 0 12px 32px -4px rgba(79, 70, 229, 0.22), 0 4px 12px -2px rgba(0, 0, 0, 0.05);
-            border: 1px solid rgba(226, 232, 240, 0.9);
+            padding: 10px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 35px rgba(99, 102, 241, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             animation: qecPulse 2.4s ease-in-out infinite;
             box-sizing: border-box;
           }
@@ -93,27 +97,30 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
-            border-radius: 16px;
+            border-radius: 18px;
           }
           .qec-brand-title {
             margin: 22px 0 6px 0;
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 800;
             letter-spacing: -0.5px;
-            color: #0f172a;
+            color: #ffffff;
+            background: linear-gradient(135deg, #ffffff 40%, #c7d2fe 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
           }
           .qec-brand-sub {
             margin: 0;
             font-size: 13px;
             font-weight: 600;
-            color: #6366f1;
+            color: #818cf8;
             letter-spacing: 0.5px;
             text-transform: uppercase;
           }
           .qec-loader-bar {
             width: 140px;
             height: 5px;
-            background: #f1f5f9;
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 99px;
             overflow: hidden;
             position: relative;
@@ -123,7 +130,7 @@
             position: absolute;
             inset: 0;
             width: 50%;
-            background: linear-gradient(90deg, #4f46e5, #8b5cf6, #ec4899);
+            background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
             border-radius: 99px;
             animation: qecShimmer 1.4s ease-in-out infinite;
           }
@@ -133,23 +140,6 @@
             font-weight: 500;
             color: #94a3b8;
             animation: qecFadeText 1.8s ease-in-out infinite;
-          }
-          html.dark #qec-splash {
-            background: #0f172a;
-          }
-          html.dark .qec-logo-box {
-            background: #1e293b;
-            border-color: rgba(99, 102, 241, 0.3);
-            box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.5);
-          }
-          html.dark .qec-brand-title {
-            color: #f8fafc;
-          }
-          html.dark .qec-brand-sub {
-            color: #818cf8;
-          }
-          html.dark .qec-loader-bar {
-            background: #1e293b;
           }
         </style>
         <div style="position:relative;display:flex;align-items:center;justify-content:center;">

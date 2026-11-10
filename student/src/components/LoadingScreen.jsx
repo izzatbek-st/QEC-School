@@ -29,3 +29,4 @@ const LoadingScreen = ({ message = "Yuklanmoqda...", fullScreen = false }) => {
 };
 
 export default LoadingScreen;
+
