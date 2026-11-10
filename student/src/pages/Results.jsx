@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { API_URL, apiFetch, getStudentId } from '../api';
 import QuizMistakesModal from '../components/QuizMistakesModal';
+import LoadingScreen from '../components/LoadingScreen';
 
 const LEVEL_CONFIG = {
   1: {
@@ -242,7 +243,7 @@ const Results = () => {
           {/* ATTEMPTS LIST */}
           <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
             {loading ? (
-              <div className="p-12 text-center text-gray-500">Yuklanmoqda...</div>
+              <LoadingScreen message="Test natijalari yuklanmoqda..." />
             ) : filteredAttempts.length === 0 ? (
               <div className="p-12 text-center">
                 <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 flex items-center justify-center mx-auto mb-3 text-2xl">
@@ -531,7 +532,7 @@ const Results = () => {
             </div>
 
             {loading ? (
-              <p className="text-gray-500 py-12 text-center">Yuklanmoqda...</p>
+              <LoadingScreen message="Reyting ro'yxati yuklanmoqda..." />
             ) : visibleStudents.length === 0 ? (
               <p className="text-gray-500 py-12 text-center">O'quvchilar topilmadi.</p>
             ) : (

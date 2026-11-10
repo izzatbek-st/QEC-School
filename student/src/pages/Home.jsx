@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { API_URL, apiFetch, getStudentId } from '../api';
+import LoadingScreen from '../components/LoadingScreen';
 
 const LEVEL_CONFIG = {
   1: {
@@ -88,12 +89,7 @@ const Home = () => {
   }, []);
 
   if (loading) {
-    return (
-      <div className="p-12 text-center text-gray-500 flex flex-col items-center justify-center space-y-3">
-        <i className="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-600"></i>
-        <span>Ko'rsatkichlar yuklanmoqda...</span>
-      </div>
-    );
+    return <LoadingScreen message="Bosh sahifa ko'rsatkichlari yuklanmoqda..." />;
   }
 
   if (error) {

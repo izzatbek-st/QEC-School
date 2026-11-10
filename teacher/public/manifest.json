@@ -1,35 +1,36 @@
 {
   "name": "QEC-School | O'qituvchi paneli",
   "short_name": "QEC-O'qituvchi",
-  "description": "QEC-School o'qituvchi boshqaruv paneli",
-  "id": "./",
-  "start_url": "./",
-  "scope": "./",
+  "description": "QEC-School ta'lim platformasi o'qituvchi boshqaruv paneli",
+  "id": "/teacher/",
+  "start_url": "/teacher/",
+  "scope": "/teacher/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "./pwa-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "./pwa-512x512.png",
+      "src": "/teacher/pwa-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./pwa-maskable-192x192.png",
-      "sizes": "192x192",
+      "src": "/teacher/pwa-maskable-512x512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "./pwa-maskable-512x512.png",
-      "sizes": "512x512",
+      "src": "/teacher/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/teacher/pwa-maskable-192x192.png",
+      "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     }

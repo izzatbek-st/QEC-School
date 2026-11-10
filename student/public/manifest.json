@@ -1,35 +1,36 @@
 {
   "name": "QEC-School | O'quvchi paneli",
   "short_name": "QEC-School",
-  "description": "QEC-School ta'lim platformasi",
-  "id": "./",
-  "start_url": "./",
-  "scope": "./",
+  "description": "QEC-School ta'lim platformasi o'quvchi paneli",
+  "id": "/student/",
+  "start_url": "/student/",
+  "scope": "/student/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "./pwa-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "./pwa-512x512.png",
+      "src": "/student/pwa-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./pwa-maskable-192x192.png",
-      "sizes": "192x192",
+      "src": "/student/pwa-maskable-512x512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "./pwa-maskable-512x512.png",
-      "sizes": "512x512",
+      "src": "/student/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/student/pwa-maskable-192x192.png",
+      "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     }

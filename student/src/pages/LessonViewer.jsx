@@ -4,6 +4,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { API_URL, apiFetch } from '../api';
 import DOMPurify from 'dompurify';
 import { getVideoMeta, sanitizeLessonHtml } from '../utils/videoUtils';
+import LoadingScreen from '../components/LoadingScreen';
 import './LessonContent.css';
 
 const LessonViewer = () => {
@@ -39,7 +40,7 @@ const LessonViewer = () => {
   }, [activeIndex]);
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-500">Yuklanmoqda...</div>;
+    return <LoadingScreen message="Dars va test ma'lumotlari yuklanmoqda..." />;
   }
 
   if (topics.length === 0) {
